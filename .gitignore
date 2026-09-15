@@ -1,0 +1,48 @@
+# ==============================
+# STM32 / CMake build artifacts
+# ==============================
+/build/
+/build-*/
+/cmake-build-*/
+/Debug/
+/Release/
+
+*.elf
+*.hex
+*.bin
+*.map
+*.out
+*.axf
+*.o
+*.obj
+*.d
+*.su
+*.lst
+
+# ==============================
+# STM32CubeMX / local temporary files
+# ==============================
+mx.scratch
+*.bak
+*.tmp
+
+# ==============================
+# IDE and editor temporary files
+# Keep .settings and .vscode: they contain project configuration.
+# ==============================
+*.swp
+*.swo
+*~
+.metadata/
+
+# ==============================
+# Logs and generated reports
+# ==============================
+*.log
+
+# ==============================
+# Operating-system files
+# ==============================
+.DS_Store
+Thumbs.db
+desktop.ini

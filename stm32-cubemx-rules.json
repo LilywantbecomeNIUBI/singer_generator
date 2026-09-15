@@ -1,0 +1,95 @@
+{
+  "files": [
+    {
+      "path_glob": "signal_generator.ioc",
+      "classification": "cubemx_project_manifest",
+      "generated_by": "cubemx",
+      "editable_strategy": "edit_in_cubemx_only",
+      "notes": [
+        "Edit this file in CubeMX only."
+      ]
+    },
+    {
+      "path_glob": "Core/Inc/stm32f4xx_hal_conf.h",
+      "classification": "cubemx_generated",
+      "generated_by": "cubemx",
+      "editable_strategy": "user_sections_only",
+      "notes": [
+        "Avoid manual edits to HAL config by default."
+      ]
+    },
+    {
+      "path_glob": "Core/Inc/stm32f4xx_it.h",
+      "classification": "cubemx_generated",
+      "generated_by": "cubemx",
+      "editable_strategy": "user_sections_only",
+      "notes": [
+        "Edit USER CODE blocks only."
+      ]
+    },
+    {
+      "path_glob": "Core/Src/main.c",
+      "classification": "cubemx_generated",
+      "generated_by": "cubemx",
+      "editable_strategy": "user_sections_only",
+      "notes": [
+        "Edit USER CODE blocks only.",
+        "Do not change SystemClock_Config or MX init order."
+      ]
+    },
+    {
+      "path_glob": "Core/Src/stm32f4xx_hal_msp.c",
+      "classification": "cubemx_generated",
+      "generated_by": "cubemx",
+      "editable_strategy": "user_sections_only",
+      "notes": [
+        "Avoid manual edits unless the task directly requires MSP changes."
+      ]
+    },
+    {
+      "path_glob": "Core/Src/stm32f4xx_it.c",
+      "classification": "cubemx_generated",
+      "generated_by": "cubemx",
+      "editable_strategy": "user_sections_only",
+      "notes": [
+        "Prefer USER CODE blocks or HAL callbacks only."
+      ]
+    },
+    {
+      "path_glob": "Core/Src/app_*.c",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "Application layer source file. Safe for free edits."
+      ]
+    },
+    {
+      "path_glob": "Core/Inc/app_*.h",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "Application layer header file. Safe for free edits."
+      ]
+    },
+    {
+      "path_glob": "Core/Src/bsp_*.c",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "Board support source file. Safe for free edits."
+      ]
+    },
+    {
+      "path_glob": "Core/Inc/bsp_*.h",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "Board support header file. Safe for free edits."
+      ]
+    }
+  ]
+}
