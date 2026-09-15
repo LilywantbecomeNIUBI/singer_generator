@@ -42,15 +42,15 @@ STM32F407ZGTx 的板级基础配置已经生成；当前完成 M1 最小代码�
 
 ## 4. AD9959：SPI1 与相邻控制脚
 
-AD9959 第一阶段采用单线串行写入，只接 `SDIO0`，不接 `SDIO1~3`。`P0~P3` 暂时固定为低电平；后续做硬件调制或四线串行模式时再扩展。
+AD9959 M1基线严格沿用模块例程的默认单比特两线写模式：`SDIO0` 写入，`SDIO1~3`和`P0~P3`固定为低电平。PB3/PB5在应用初始化时从SPI1复用切换为2 MHz GPIO模拟时序。
 
 选择探索者右侧扩展排针顶部相邻区域，复用板级模板已有的 `PB3/PB4/PB5` SPI1 总线：
 
 | STM32 引脚 | CubeMX 功能/标签 | AD9959 模块端 | 初始状态 | 说明 |
 |---|---|---|---|---|
 | PB3 | SPI1_SCK | SCLK | SPI idle low | SPI1 时钟 |
-| PB4 | SPI1_MISO | 不接 | - | 保留板载 SPI Flash 读回能力 |
-| PB5 | SPI1_MOSI | SDIO0 | SPI | 只写数据线 |
+| PB4 | SPI1_MISO（启动后转GPIO） | SDIO2 | Low | 按参考例程固定为低，不执行读回 |
+| PB5 | SPI1_MOSI（启动后转GPIO） | SDIO0 | GPIO bit-bang | AD9959寄存器写入线 |
 | PB6 | GPIO Output / `AD9959_CS` | CS | High | 上电先取消片选 |
 | PB7 | GPIO Output / `AD9959_IO_UPDATE` | I/O_UPDATE | Low | 写寄存器后再脉冲更新 |
 | PA15 | GPIO Output / `AD9959_RESET` | RESET | Low | Serial Wire 模式下可复用 |
@@ -165,5 +165,5 @@ USART1 使用轮询发送，不启用 DMA 或中断；用于打印上电、AD995
 
 - `bsp_ad9959.c/.h`：HAL SPI 寄存器写入、复位、I/O_UPDATE、频率/幅度/相位换算；
 - `app_signal_generator.c/.h`：上电配置物理 CH0（方案中的逻辑 CH1）为 1 MHz、0 相位、满量程数字幅度；
-- USART1 在 115200 8N1 下打印初始化结果；调试变量 `g_app_m1_status == APP_M1_SPI_CONFIG_SENT` 仅表示 SPI 配置已发送；
+- USART1在115200 8N1下打印参考序列发送结果；`g_app_m1_status == APP_M1_REFERENCE_SEQUENCE_SENT` 只表示GPIO模拟写序列已经执行；
 - 1 MHz 实际输出、幅度和波形质量必须在 AD9959 模块 CH0 的 SMA 端用示波器确认，软件无法闭环证明模拟输出正常。
