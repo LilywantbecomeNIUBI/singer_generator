@@ -78,9 +78,7 @@ static uint8_t s_step_selection;
 static lv_obj_t *s_toast;
 static uint32_t s_toast_until_ms;
 static lv_point_precise_t s_preview_points[UI_PREVIEW_POINT_CAPACITY];
-static lv_point_precise_t s_preview_reference_points[UI_PREVIEW_POINT_CAPACITY];
 static lv_point_precise_t s_edit_wave_points[UI_EDIT_WAVE_POINT_CAPACITY];
-static lv_point_precise_t s_edit_reference_points[UI_EDIT_WAVE_POINT_CAPACITY];
 
 static lv_color_t UI_ChannelColor(uint8_t channel)
 {
@@ -569,8 +567,7 @@ static lv_obj_t *UI_CreateWaveLine(lv_obj_t *parent,
                                    lv_point_precise_t *points,
                                    int32_t x,
                                    lv_color_t color,
-                                   int32_t width,
-                                   uint8_t dashed)
+                                   int32_t width)
 {
   lv_obj_t *line = lv_line_create(parent);
 
@@ -579,12 +576,6 @@ static lv_obj_t *UI_CreateWaveLine(lv_obj_t *parent,
   lv_obj_set_style_line_color(line, color, LV_PART_MAIN);
   lv_obj_set_style_line_width(line, width, LV_PART_MAIN);
   lv_obj_set_style_line_rounded(line, true, LV_PART_MAIN);
-  if (dashed != 0U)
-  {
-    lv_obj_set_style_line_dash_width(line, 4, LV_PART_MAIN);
-    lv_obj_set_style_line_dash_gap(line, 3, LV_PART_MAIN);
-    lv_obj_set_style_line_opa(line, LV_OPA_60, LV_PART_MAIN);
-  }
   lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
   return line;
 }
@@ -595,7 +586,7 @@ static void UI_CreateWaveformPreview(const channel_state_t *channel)
   lv_color_t reference_color = lv_color_hex(UI_COLOR_BORDER);
   lv_color_t wave_color = UI_ChannelColor(s_state.active_channel);
   int32_t center_y = UI_PREVIEW_WAVE_CENTER_Y;
-  int32_t amplitude_px = 14;
+  int32_t amplitude_px = 11;
   uint32_t phase_tenths = 0U;
 
   lv_obj_set_pos(preview, 4, 29);
@@ -613,17 +604,17 @@ static void UI_CreateWaveformPreview(const channel_state_t *channel)
 
   if (s_parameter == UI_PARAM_AMPLITUDE)
   {
-    amplitude_px = 5 + (int32_t)(channel->amplitude_vpp * 5.0F + 0.5F);
-    if (amplitude_px > 15)
+    amplitude_px = 4 + (int32_t)(channel->amplitude_vpp * 4.0F + 0.5F);
+    if (amplitude_px > 12)
     {
-      amplitude_px = 15;
+      amplitude_px = 12;
     }
   }
   else if (s_parameter == UI_PARAM_OFFSET)
   {
     center_y = UI_PREVIEW_WAVE_CENTER_Y -
                (int32_t)(channel->offset_v * 8.0F);
-    amplitude_px = 8;
+    amplitude_px = 7;
     UI_CreateDashedReference(preview,
                              24,
                              UI_PREVIEW_WAVE_WIDTH,
@@ -633,18 +624,6 @@ static void UI_CreateWaveformPreview(const channel_state_t *channel)
   else if (s_parameter == UI_PARAM_PHASE)
   {
     phase_tenths = (uint32_t)(channel->phase_deg * 10.0F + 0.5F);
-    UI_BuildWavePoints(s_preview_reference_points,
-                       channel->waveform,
-                       UI_PREVIEW_WAVE_WIDTH,
-                       UI_PREVIEW_WAVE_CENTER_Y,
-                       amplitude_px,
-                       0U);
-    (void)UI_CreateWaveLine(preview,
-                            s_preview_reference_points,
-                            24,
-                            reference_color,
-                            1,
-                            1U);
   }
 
   UI_BuildWavePoints(s_preview_points,
@@ -657,8 +636,7 @@ static void UI_CreateWaveformPreview(const channel_state_t *channel)
                           s_preview_points,
                           24,
                           wave_color,
-                          2,
-                          0U);
+                          2);
 
   if (s_parameter == UI_PARAM_FREQUENCY)
   {
@@ -687,18 +665,6 @@ static void UI_CreateWaveformPreview(const channel_state_t *channel)
                              NULL,
                              wave_color);
   }
-  else
-  {
-    int32_t phase_x = 24 +
-                      (int32_t)(UI_PREVIEW_WAVE_WIDTH * channel->phase_deg /
-                                360.0F);
-    UI_CreateHorizontalMeasure(preview,
-                               24,
-                               phase_x,
-                               40,
-                               NULL,
-                               wave_color);
-  }
 }
 
 static void UI_CreateEditGraph(const channel_state_t *channel)
@@ -717,11 +683,14 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
                   lv_color_hex(UI_COLOR_BORDER),
                   2);
   lv_obj_clear_flag(graph, LV_OBJ_FLAG_SCROLLABLE);
-  UI_CreateDashedReference(graph,
-                           12,
-                           UI_EDIT_WAVE_WIDTH + 4,
-                           UI_EDIT_WAVE_ZERO_Y,
-                           reference_color);
+  if (s_parameter != UI_PARAM_PHASE)
+  {
+    UI_CreateDashedReference(graph,
+                             12,
+                             UI_EDIT_WAVE_WIDTH + 4,
+                             UI_EDIT_WAVE_ZERO_Y,
+                             reference_color);
+  }
 
   if (s_parameter == UI_PARAM_AMPLITUDE)
   {
@@ -740,18 +709,6 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
   else if (s_parameter == UI_PARAM_PHASE)
   {
     phase_tenths = (uint32_t)(channel->phase_deg * 10.0F + 0.5F);
-    UI_BuildWavePoints(s_edit_reference_points,
-                       channel->waveform,
-                       UI_EDIT_WAVE_WIDTH,
-                       UI_EDIT_WAVE_ZERO_Y,
-                       amplitude_px,
-                       0U);
-    (void)UI_CreateWaveLine(graph,
-                            s_edit_reference_points,
-                            16,
-                            reference_color,
-                            1,
-                            1U);
   }
 
   UI_BuildWavePoints(s_edit_wave_points,
@@ -764,8 +721,7 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
                           s_edit_wave_points,
                           16,
                           wave_color,
-                          2,
-                          0U);
+                          2);
 
   if (s_parameter == UI_PARAM_FREQUENCY)
   {
@@ -793,18 +749,6 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
                              center_y,
                              "OFFSET",
                              wave_color);
-  }
-  else
-  {
-    int32_t phase_x = 16 +
-                      (int32_t)(UI_EDIT_WAVE_WIDTH * channel->phase_deg /
-                                360.0F);
-    UI_CreateHorizontalMeasure(graph,
-                               16,
-                               phase_x,
-                               67,
-                               "PHASE",
-                               wave_color);
   }
 }
 
