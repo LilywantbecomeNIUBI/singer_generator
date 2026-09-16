@@ -8,8 +8,8 @@
 #define UI_INPUT_LONG_PRESS_MS 1000U
 #define UI_INPUT_ENCODER_DEBOUNCE_MS 25U
 #define UI_INPUT_ENCODER_MAX_EVENTS_PER_PROCESS 8
-#define UI_IR_DUPLICATE_SUPPRESS_MS 180U
-#define UI_IR_REPEAT_START_MS 450U
+#define UI_IR_DUPLICATE_SUPPRESS_MS 300U
+#define UI_IR_REPEAT_START_MS 550U
 #define UI_IR_REPEAT_PERIOD_MS 100U
 
 #define UI_IR_KEY_POWER 69U
@@ -49,6 +49,7 @@ static uint8_t s_ir_last_key;
 static uint8_t s_ir_last_key_valid;
 static uint32_t s_ir_pressed_at_ms;
 static uint32_t s_ir_last_dispatch_ms;
+static uint32_t s_ir_last_frame_ms;
 
 static UI_Command UI_Input_MapIRKey(uint8_t key, uint8_t is_repeat)
 {
@@ -57,13 +58,13 @@ static UI_Command UI_Input_MapIRKey(uint8_t key, uint8_t is_repeat)
     case UI_IR_KEY_POWER:
       return (is_repeat == 0U) ? UI_CMD_OUTPUT_TOGGLE : UI_CMD_NONE;
     case UI_IR_KEY_UP:
-      return UI_CMD_PARAM_PREV;
+      return (is_repeat == 0U) ? UI_CMD_PARAM_PREV : UI_CMD_NONE;
     case UI_IR_KEY_DOWN:
-      return UI_CMD_PARAM_NEXT;
+      return (is_repeat == 0U) ? UI_CMD_PARAM_NEXT : UI_CMD_NONE;
     case UI_IR_KEY_LEFT:
-      return UI_CMD_CH_PREV;
+      return (is_repeat == 0U) ? UI_CMD_CH_PREV : UI_CMD_NONE;
     case UI_IR_KEY_RIGHT:
-      return UI_CMD_CH_NEXT;
+      return (is_repeat == 0U) ? UI_CMD_CH_NEXT : UI_CMD_NONE;
     case UI_IR_KEY_VOLUME_DOWN:
       return UI_CMD_ENCODER_CCW;
     case UI_IR_KEY_VOLUME_UP:
@@ -190,6 +191,7 @@ void UI_Input_Init(void)
   s_ir_last_key_valid = 0U;
   s_ir_pressed_at_ms = now;
   s_ir_last_dispatch_ms = now;
+  s_ir_last_frame_ms = now;
 }
 
 void UI_Input_Process(void)
@@ -252,15 +254,17 @@ void UI_Input_Process(void)
     UI_Command command;
 
     now = HAL_GetTick();
+    if ((ir_event.is_repeat == 0U) &&
+        (s_ir_last_key_valid != 0U) &&
+        (ir_event.key == s_ir_last_key) &&
+        ((now - s_ir_last_frame_ms) < UI_IR_DUPLICATE_SUPPRESS_MS))
+    {
+      ir_event.is_repeat = 1U;
+    }
+    s_ir_last_frame_ms = now;
+
     if (ir_event.is_repeat == 0U)
     {
-      if ((s_ir_last_key_valid != 0U) &&
-          (ir_event.key == s_ir_last_key) &&
-          ((now - s_ir_last_dispatch_ms) < UI_IR_DUPLICATE_SUPPRESS_MS))
-      {
-        continue;
-      }
-
       s_ir_last_key = ir_event.key;
       s_ir_last_key_valid = 1U;
       s_ir_pressed_at_ms = now;

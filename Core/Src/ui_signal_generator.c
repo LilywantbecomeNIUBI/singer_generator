@@ -47,7 +47,8 @@ typedef enum
   UI_PAGE_WAVEFORM,
   UI_PAGE_CHANNEL_OVERVIEW,
   UI_PAGE_FUNCTION_MENU,
-  UI_PAGE_STEP_SELECT
+  UI_PAGE_STEP_SELECT,
+  UI_PAGE_UNIT_SELECT
 } UI_Page;
 
 typedef enum
@@ -84,6 +85,9 @@ static lv_point_precise_t s_preview_points[UI_PREVIEW_POINT_CAPACITY];
 static lv_point_precise_t s_edit_wave_points[UI_EDIT_WAVE_POINT_CAPACITY];
 static char s_numeric_buffer[UI_NUMERIC_BUFFER_SIZE];
 static uint8_t s_numeric_length;
+static uint8_t s_unit_selection;
+
+static void UI_ShowUnitSelect(void);
 
 static lv_color_t UI_ChannelColor(uint8_t channel)
 {
@@ -1158,6 +1162,9 @@ static void UI_RebuildCurrentPage(void)
     case UI_PAGE_STEP_SELECT:
       UI_ShowStepSelect();
       break;
+    case UI_PAGE_UNIT_SELECT:
+      UI_ShowUnitSelect();
+      break;
     case UI_PAGE_MAIN:
     default:
       UI_ShowMain();
@@ -1374,7 +1381,132 @@ static uint8_t UI_ParseNumericValue(double *value)
   return 1U;
 }
 
-static void UI_CommitNumericInput(void)
+static uint8_t UI_GetUnitCount(void)
+{
+  if (s_parameter == UI_PARAM_FREQUENCY)
+  {
+    return 3U;
+  }
+  if ((s_parameter == UI_PARAM_AMPLITUDE) ||
+      (s_parameter == UI_PARAM_OFFSET))
+  {
+    return 2U;
+  }
+  return 1U;
+}
+
+static const char *UI_GetUnitLabel(uint8_t index)
+{
+  if (s_parameter == UI_PARAM_FREQUENCY)
+  {
+    static const char *const labels[] = {"Hz", "kHz", "MHz"};
+    return labels[index];
+  }
+  if (s_parameter == UI_PARAM_AMPLITUDE)
+  {
+    static const char *const labels[] = {"mVpp", "Vpp"};
+    return labels[index];
+  }
+  if (s_parameter == UI_PARAM_OFFSET)
+  {
+    static const char *const labels[] = {"mV", "V"};
+    return labels[index];
+  }
+  return "deg";
+}
+
+static double UI_GetUnitScale(uint8_t index)
+{
+  if (s_parameter == UI_PARAM_FREQUENCY)
+  {
+    static const double scales[] = {1.0, 1000.0, 1000000.0};
+    return scales[index];
+  }
+  if ((s_parameter == UI_PARAM_AMPLITUDE) ||
+      (s_parameter == UI_PARAM_OFFSET))
+  {
+    static const double scales[] = {0.001, 1.0};
+    return scales[index];
+  }
+  return 1.0;
+}
+
+static void UI_SelectDefaultUnit(void)
+{
+  if ((s_parameter == UI_PARAM_AMPLITUDE) ||
+      (s_parameter == UI_PARAM_OFFSET))
+  {
+    s_unit_selection = 1U;
+  }
+  else
+  {
+    s_unit_selection = 0U;
+  }
+}
+
+static void UI_ShowUnitSelect(void)
+{
+  uint8_t index;
+  uint8_t count = UI_GetUnitCount();
+  lv_obj_t *hint;
+  lv_obj_t *value;
+  char value_text[32];
+
+  UI_ClearScreen();
+  s_page = UI_PAGE_UNIT_SELECT;
+  s_mode = UI_MODE_POPUP;
+  (void)UI_CreateTopBar("SELECT UNIT");
+
+  (void)snprintf(value_text,
+                 sizeof(value_text),
+                 "Value  %s",
+                 s_numeric_buffer);
+  value = UI_CreateLabel(lv_screen_active(),
+                         value_text,
+                         UI_ChannelColor(s_state.active_channel));
+  lv_obj_set_style_text_font(value, &lv_font_montserrat_18, LV_PART_MAIN);
+  lv_obj_align(value, LV_ALIGN_TOP_MID, 0, 36);
+
+  hint = UI_CreateLabel(lv_screen_active(),
+                        "Press 1/2/3 or select + OK",
+                        lv_color_hex(UI_COLOR_TEXT_MUTED));
+  lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 62);
+
+  for (index = 0U; index < count; ++index)
+  {
+    lv_obj_t *button;
+    char text[24];
+    int32_t width = (count == 3U) ? 96 : 145;
+    int32_t gap = (count == 3U) ? 7 : 14;
+    int32_t x = gap + (int32_t)index * (width + gap);
+
+    (void)snprintf(text,
+                   sizeof(text),
+                   "%u  %s",
+                   (unsigned int)(index + 1U),
+                   UI_GetUnitLabel(index));
+    button = UI_CreateButton(lv_screen_active(),
+                             text,
+                             x,
+                             92,
+                             width,
+                             64,
+                             (UI_Command)(UI_CMD_NUM_1 + index),
+                             1U);
+    if (index == s_unit_selection)
+    {
+      lv_obj_set_style_border_color(button,
+                                    UI_ChannelColor(s_state.active_channel),
+                                    LV_PART_MAIN);
+      lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
+    }
+  }
+
+  (void)UI_CreateButton(lv_screen_active(), "Back", 14, 183, 292, 42,
+                        UI_CMD_BACK, 1U);
+}
+
+static void UI_CommitNumericInput(double unit_scale)
 {
   channel_state_t *channel = Generator_State_GetActive(&s_state);
   double value;
@@ -1382,6 +1514,7 @@ static void UI_CommitNumericInput(void)
 
   if (valid != 0U)
   {
+    value *= unit_scale;
     if ((s_parameter == UI_PARAM_FREQUENCY) &&
         (value >= UI_FREQ_MIN_HZ) && (value <= UI_FREQ_MAX_HZ))
     {
@@ -1582,6 +1715,7 @@ void UI_SignalGenerator_Init(void)
   s_toast = NULL;
   s_numeric_length = 0U;
   s_numeric_buffer[0] = '\0';
+  s_unit_selection = 0U;
   UI_ShowMain();
 }
 
@@ -1598,6 +1732,44 @@ void UI_SignalGenerator_Process(void)
 void UI_SignalGenerator_Dispatch(UI_Command command)
 {
   channel_state_t *channel = Generator_State_GetActive(&s_state);
+
+  if (s_page == UI_PAGE_UNIT_SELECT)
+  {
+    uint8_t count = UI_GetUnitCount();
+
+    if ((command >= UI_CMD_NUM_1) &&
+        (command < (UI_Command)(UI_CMD_NUM_1 + count)))
+    {
+      s_unit_selection = (uint8_t)(command - UI_CMD_NUM_1);
+      UI_CommitNumericInput(UI_GetUnitScale(s_unit_selection));
+    }
+    else if ((command == UI_CMD_PARAM_PREV) ||
+             (command == UI_CMD_ENCODER_CCW))
+    {
+      s_unit_selection = (s_unit_selection == 0U)
+                             ? (uint8_t)(count - 1U)
+                             : (uint8_t)(s_unit_selection - 1U);
+      UI_ShowUnitSelect();
+    }
+    else if ((command == UI_CMD_PARAM_NEXT) ||
+             (command == UI_CMD_ENCODER_CW))
+    {
+      s_unit_selection = (uint8_t)((s_unit_selection + 1U) % count);
+      UI_ShowUnitSelect();
+    }
+    else if ((command == UI_CMD_ENCODER_PRESS) ||
+             (command == UI_CMD_ENTER))
+    {
+      UI_CommitNumericInput(UI_GetUnitScale(s_unit_selection));
+    }
+    else if ((command == UI_CMD_DELETE) || (command == UI_CMD_BACK))
+    {
+      UI_ShowEdit();
+      s_mode = UI_MODE_NUM_INPUT;
+      UI_RefreshNumericDisplay();
+    }
+    return;
+  }
 
   if (s_mode == UI_MODE_NUM_INPUT)
   {
@@ -1620,7 +1792,15 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
     else if ((command == UI_CMD_ENCODER_PRESS) ||
              (command == UI_CMD_ENTER))
     {
-      UI_CommitNumericInput();
+      if (s_parameter == UI_PARAM_PHASE)
+      {
+        UI_CommitNumericInput(1.0);
+      }
+      else
+      {
+        UI_SelectDefaultUnit();
+        UI_ShowUnitSelect();
+      }
     }
     else if (command == UI_CMD_DELETE)
     {
@@ -1786,7 +1966,20 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
   }
   if ((command >= UI_CMD_NUM_0) && (command <= UI_CMD_NUM_9))
   {
-    UI_AppendNumericDigit((uint8_t)(command - UI_CMD_NUM_0));
+    uint8_t digit = (uint8_t)(command - UI_CMD_NUM_0);
+
+    if (s_page == UI_PAGE_MAIN)
+    {
+      if ((digit >= 1U) && (digit <= GENERATOR_CHANNEL_COUNT))
+      {
+        s_state.active_channel = (uint8_t)(digit - 1U);
+        UI_ShowMain();
+      }
+    }
+    else if (s_page == UI_PAGE_EDIT)
+    {
+      UI_AppendNumericDigit(digit);
+    }
     return;
   }
   if ((s_page == UI_PAGE_STEP_SELECT) && (command == UI_CMD_ENTER))
