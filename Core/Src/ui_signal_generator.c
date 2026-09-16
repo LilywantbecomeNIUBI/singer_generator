@@ -23,6 +23,8 @@
 #define UI_EDIT_WAVE_WIDTH 210
 #define UI_EDIT_WAVE_ZERO_Y 38
 #define UI_NUMERIC_BUFFER_SIZE 16U
+#define UI_MAIN_FOCUS_BOTTOM UI_PARAM_COUNT
+#define UI_BOTTOM_ITEM_COUNT 4U
 
 #define UI_FREQ_MIN_HZ 1.0
 #define UI_FREQ_MAX_HZ 100000000.0
@@ -86,6 +88,8 @@ static lv_point_precise_t s_edit_wave_points[UI_EDIT_WAVE_POINT_CAPACITY];
 static char s_numeric_buffer[UI_NUMERIC_BUFFER_SIZE];
 static uint8_t s_numeric_length;
 static uint8_t s_unit_selection;
+static uint8_t s_main_focus;
+static uint8_t s_bottom_selection;
 
 static void UI_ShowUnitSelect(void);
 
@@ -231,26 +235,50 @@ static void UI_FormatAmplitude(float amplitude_vpp,
                                size_t buffer_size)
 {
   uint32_t millivolts = (uint32_t)(amplitude_vpp * 1000.0F + 0.5F);
-  (void)snprintf(buffer,
-                 buffer_size,
-                 "%lu.%03lu Vpp",
-                 (unsigned long)(millivolts / 1000U),
-                 (unsigned long)(millivolts % 1000U));
+
+  if (millivolts < 1000U)
+  {
+    (void)snprintf(buffer,
+                   buffer_size,
+                   "%lu mVpp",
+                   (unsigned long)millivolts);
+  }
+  else
+  {
+    (void)snprintf(buffer,
+                   buffer_size,
+                   "%lu.%03lu Vpp",
+                   (unsigned long)(millivolts / 1000U),
+                   (unsigned long)(millivolts % 1000U));
+  }
 }
 
 static void UI_FormatOffset(float offset_v,
                             char *buffer,
                             size_t buffer_size)
 {
-  int32_t millivolts = (int32_t)(offset_v * 1000.0F);
+  int32_t millivolts = (int32_t)(offset_v * 1000.0F +
+                                  ((offset_v >= 0.0F) ? 0.5F : -0.5F));
   uint32_t magnitude = (uint32_t)((millivolts < 0) ? -millivolts
                                                     : millivolts);
-  (void)snprintf(buffer,
-                 buffer_size,
-                 "%s%lu.%03lu V",
-                 (millivolts < 0) ? "-" : "",
-                 (unsigned long)(magnitude / 1000U),
-                 (unsigned long)(magnitude % 1000U));
+
+  if (magnitude < 1000U)
+  {
+    (void)snprintf(buffer,
+                   buffer_size,
+                   "%s%lu mV",
+                   (millivolts < 0) ? "-" : "",
+                   (unsigned long)magnitude);
+  }
+  else
+  {
+    (void)snprintf(buffer,
+                   buffer_size,
+                   "%s%lu.%03lu V",
+                   (millivolts < 0) ? "-" : "",
+                   (unsigned long)(magnitude / 1000U),
+                   (unsigned long)(magnitude % 1000U));
+  }
 }
 
 static void UI_FormatPhase(float phase_deg,
@@ -807,14 +835,18 @@ static void UI_ShowMain(void)
     lv_obj_t *name;
     lv_obj_t *value;
     char value_text[40];
+    uint8_t selected = ((s_main_focus != UI_MAIN_FOCUS_BOTTOM) &&
+                        (index == s_parameter))
+                           ? 1U
+                           : 0U;
 
     lv_obj_set_pos(row, 4, 1 + (int32_t)index * 29);
     lv_obj_set_size(row, 312, 27);
     UI_SetObjectBox(row,
-                    lv_color_hex((index == s_parameter)
+                    lv_color_hex((selected != 0U)
                                      ? UI_COLOR_PANEL_SELECTED
                                      : UI_COLOR_BACKGROUND),
-                    (index == s_parameter)
+                    (selected != 0U)
                         ? UI_ChannelColor(s_state.active_channel)
                         : lv_color_hex(UI_COLOR_BORDER),
                     2);
@@ -827,7 +859,7 @@ static void UI_ShowMain(void)
 
     name = UI_CreateLabel(row,
                           s_parameter_names[index],
-                          (index == s_parameter)
+                          (selected != 0U)
                               ? UI_ChannelColor(s_state.active_channel)
                               : lv_color_hex(UI_COLOR_TEXT_MUTED));
     lv_obj_set_pos(name, 8, 4);
@@ -841,14 +873,38 @@ static void UI_ShowMain(void)
     lv_obj_align(value, LV_ALIGN_RIGHT_MID, -8, 0);
   }
 
-  (void)UI_CreateButton(lv_screen_active(), "Wave", 2, 198, 77, 40,
-                        UI_CMD_WAVE_PAGE, 1U);
-  (void)UI_CreateButton(lv_screen_active(), "Sweep", 82, 198, 77, 40,
-                        UI_CMD_NONE, 0U);
-  (void)UI_CreateButton(lv_screen_active(), "Mod", 162, 198, 77, 40,
-                        UI_CMD_NONE, 0U);
-  (void)UI_CreateButton(lv_screen_active(), "More", 242, 198, 76, 40,
-                        UI_CMD_MENU, 1U);
+  {
+    static const char *const labels[UI_BOTTOM_ITEM_COUNT] = {
+        "Wave", "Sweep", "Mod", "More"};
+    static const UI_Command commands[UI_BOTTOM_ITEM_COUNT] = {
+        UI_CMD_WAVE_PAGE, UI_CMD_NONE, UI_CMD_NONE, UI_CMD_MENU};
+    static const uint8_t enabled[UI_BOTTOM_ITEM_COUNT] = {1U, 0U, 0U, 1U};
+
+    for (index = 0U; index < UI_BOTTOM_ITEM_COUNT; ++index)
+    {
+      lv_obj_t *button = UI_CreateButton(
+          lv_screen_active(),
+          labels[index],
+          2 + (int32_t)index * 80,
+          198,
+          (index == (UI_BOTTOM_ITEM_COUNT - 1U)) ? 76 : 77,
+          40,
+          commands[index],
+          enabled[index]);
+
+      if ((s_main_focus == UI_MAIN_FOCUS_BOTTOM) &&
+          (index == s_bottom_selection))
+      {
+        lv_obj_set_style_bg_color(button,
+                                  lv_color_hex(UI_COLOR_PANEL_SELECTED),
+                                  LV_PART_MAIN);
+        lv_obj_set_style_border_color(button,
+                                      UI_ChannelColor(s_state.active_channel),
+                                      LV_PART_MAIN);
+        lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
+      }
+    }
+  }
 }
 
 static void UI_ShowEdit(void)
@@ -1177,6 +1233,7 @@ static void UI_StartEdit(UI_Parameter parameter)
   channel_state_t *channel = Generator_State_GetActive(&s_state);
 
   s_parameter = parameter;
+  s_main_focus = (uint8_t)parameter;
   s_edit_backup = *channel;
   UI_ShowEdit();
 }
@@ -1433,8 +1490,22 @@ static double UI_GetUnitScale(uint8_t index)
 
 static void UI_SelectDefaultUnit(void)
 {
-  if ((s_parameter == UI_PARAM_AMPLITUDE) ||
-      (s_parameter == UI_PARAM_OFFSET))
+  double entered_value = 0.0;
+
+  (void)UI_ParseNumericValue(&entered_value);
+  if ((s_parameter == UI_PARAM_AMPLITUDE) &&
+      (entered_value > UI_AMPLITUDE_MAX_VPP))
+  {
+    s_unit_selection = 0U;
+  }
+  else if ((s_parameter == UI_PARAM_OFFSET) &&
+           ((entered_value > UI_OFFSET_MAX_V) ||
+            (entered_value < UI_OFFSET_MIN_V)))
+  {
+    s_unit_selection = 0U;
+  }
+  else if ((s_parameter == UI_PARAM_AMPLITUDE) ||
+           (s_parameter == UI_PARAM_OFFSET))
   {
     s_unit_selection = 1U;
   }
@@ -1630,6 +1701,42 @@ static void UI_HandleBack(void)
   }
 }
 
+static void UI_NavigateMainFocus(int8_t direction)
+{
+  int32_t next = (int32_t)s_main_focus + direction;
+
+  if (next < 0)
+  {
+    next = UI_MAIN_FOCUS_BOTTOM;
+  }
+  else if (next > UI_MAIN_FOCUS_BOTTOM)
+  {
+    next = 0;
+  }
+  s_main_focus = (uint8_t)next;
+  if (s_main_focus < UI_PARAM_COUNT)
+  {
+    s_parameter = (UI_Parameter)s_main_focus;
+  }
+  UI_ShowMain();
+}
+
+static void UI_ActivateBottomSelection(void)
+{
+  if (s_bottom_selection == 0U)
+  {
+    UI_ShowWaveform();
+  }
+  else if (s_bottom_selection == 3U)
+  {
+    UI_ShowFunctionMenu();
+  }
+  else
+  {
+    UI_ShowToast("FUNCTION NOT AVAILABLE", lv_color_hex(UI_COLOR_WARNING));
+  }
+}
+
 static void UI_HandleEncoder(UI_Command command)
 {
   int8_t direction = (command == UI_CMD_ENCODER_CW) ? 1 : -1;
@@ -1639,27 +1746,31 @@ static void UI_HandleEncoder(UI_Command command)
     if ((command == UI_CMD_ENCODER_CW) ||
         (command == UI_CMD_ENCODER_CCW))
     {
-      int32_t next = (int32_t)s_parameter + direction;
-      if (next < 0)
-      {
-        next = UI_PARAM_COUNT - 1;
-      }
-      else if (next >= UI_PARAM_COUNT)
-      {
-        next = 0;
-      }
-      s_parameter = (UI_Parameter)next;
-      UI_ShowMain();
+      UI_NavigateMainFocus(direction);
     }
     else if (command == UI_CMD_ENCODER_PRESS)
     {
-      UI_StartEdit(s_parameter);
+      if (s_main_focus == UI_MAIN_FOCUS_BOTTOM)
+      {
+        UI_ActivateBottomSelection();
+      }
+      else
+      {
+        UI_StartEdit(s_parameter);
+      }
     }
     else if (command == UI_CMD_ENCODER_LONG)
     {
-      UI_StartEdit(s_parameter);
-      UI_SelectCurrentStep();
-      UI_ShowStepSelect();
+      if (s_main_focus == UI_MAIN_FOCUS_BOTTOM)
+      {
+        UI_ActivateBottomSelection();
+      }
+      else
+      {
+        UI_StartEdit(s_parameter);
+        UI_SelectCurrentStep();
+        UI_ShowStepSelect();
+      }
     }
   }
   else if (s_page == UI_PAGE_EDIT)
@@ -1716,6 +1827,8 @@ void UI_SignalGenerator_Init(void)
   s_numeric_length = 0U;
   s_numeric_buffer[0] = '\0';
   s_unit_selection = 0U;
+  s_main_focus = UI_PARAM_FREQUENCY;
+  s_bottom_selection = 0U;
   UI_ShowMain();
 }
 
@@ -1835,6 +1948,14 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
   }
   if (command == UI_CMD_CH_NEXT)
   {
+    if ((s_page == UI_PAGE_MAIN) &&
+        (s_main_focus == UI_MAIN_FOCUS_BOTTOM))
+    {
+      s_bottom_selection =
+          (uint8_t)((s_bottom_selection + 1U) % UI_BOTTOM_ITEM_COUNT);
+      UI_ShowMain();
+      return;
+    }
     s_state.active_channel =
         (uint8_t)((s_state.active_channel + 1U) % GENERATOR_CHANNEL_COUNT);
     UI_ShowMain();
@@ -1842,6 +1963,15 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
   }
   if (command == UI_CMD_CH_PREV)
   {
+    if ((s_page == UI_PAGE_MAIN) &&
+        (s_main_focus == UI_MAIN_FOCUS_BOTTOM))
+    {
+      s_bottom_selection = (s_bottom_selection == 0U)
+                               ? (UI_BOTTOM_ITEM_COUNT - 1U)
+                               : (uint8_t)(s_bottom_selection - 1U);
+      UI_ShowMain();
+      return;
+    }
     s_state.active_channel = (s_state.active_channel == 0U)
                                  ? (GENERATOR_CHANNEL_COUNT - 1U)
                                  : (s_state.active_channel - 1U);
@@ -1917,6 +2047,13 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
       (command == UI_CMD_PARAM_NEXT))
   {
     int32_t direction = (command == UI_CMD_PARAM_NEXT) ? 1 : -1;
+
+    if (s_page == UI_PAGE_MAIN)
+    {
+      UI_NavigateMainFocus((int8_t)direction);
+      return;
+    }
+
     int32_t next = (int32_t)s_parameter + direction;
 
     if (next < 0)
