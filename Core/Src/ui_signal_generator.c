@@ -22,6 +22,7 @@
 #define UI_EDIT_WAVE_POINT_CAPACITY 33U
 #define UI_EDIT_WAVE_WIDTH 210
 #define UI_EDIT_WAVE_ZERO_Y 38
+#define UI_NUMERIC_BUFFER_SIZE 16U
 
 #define UI_FREQ_MIN_HZ 1.0
 #define UI_FREQ_MAX_HZ 100000000.0
@@ -81,6 +82,8 @@ static lv_obj_t *s_edit_graph;
 static lv_obj_t *s_edit_value_label;
 static lv_point_precise_t s_preview_points[UI_PREVIEW_POINT_CAPACITY];
 static lv_point_precise_t s_edit_wave_points[UI_EDIT_WAVE_POINT_CAPACITY];
+static char s_numeric_buffer[UI_NUMERIC_BUFFER_SIZE];
+static uint8_t s_numeric_length;
 
 static lv_color_t UI_ChannelColor(uint8_t channel)
 {
@@ -1171,6 +1174,252 @@ static void UI_StartEdit(UI_Parameter parameter)
   UI_ShowEdit();
 }
 
+static const char *UI_NumericUnit(void)
+{
+  if (s_parameter == UI_PARAM_FREQUENCY)
+  {
+    return "Hz";
+  }
+  if (s_parameter == UI_PARAM_AMPLITUDE)
+  {
+    return "Vpp";
+  }
+  if (s_parameter == UI_PARAM_OFFSET)
+  {
+    return "V";
+  }
+  return "deg";
+}
+
+static void UI_RefreshNumericDisplay(void)
+{
+  char text[48];
+
+  if ((s_mode != UI_MODE_NUM_INPUT) || (s_edit_value_label == NULL))
+  {
+    return;
+  }
+
+  (void)snprintf(text,
+                 sizeof(text),
+                 "INPUT %s%s %s",
+                 (s_numeric_length == 0U) ? "_" : "",
+                 s_numeric_buffer,
+                 UI_NumericUnit());
+  lv_label_set_text(s_edit_value_label, text);
+}
+
+static void UI_BeginNumericInput(uint8_t digit)
+{
+  if (s_page != UI_PAGE_EDIT)
+  {
+    UI_StartEdit(s_parameter);
+  }
+
+  s_numeric_length = 1U;
+  s_numeric_buffer[0] = (char)('0' + digit);
+  s_numeric_buffer[1] = '\0';
+  s_mode = UI_MODE_NUM_INPUT;
+  UI_RefreshNumericDisplay();
+}
+
+static void UI_AppendNumericDigit(uint8_t digit)
+{
+  if (s_mode != UI_MODE_NUM_INPUT)
+  {
+    UI_BeginNumericInput(digit);
+    return;
+  }
+
+  if (s_numeric_length < (UI_NUMERIC_BUFFER_SIZE - 1U))
+  {
+    s_numeric_buffer[s_numeric_length++] = (char)('0' + digit);
+    s_numeric_buffer[s_numeric_length] = '\0';
+    UI_RefreshNumericDisplay();
+  }
+}
+
+static void UI_AppendNumericDecimal(void)
+{
+  uint8_t index;
+
+  for (index = 0U; index < s_numeric_length; ++index)
+  {
+    if (s_numeric_buffer[index] == '.')
+    {
+      return;
+    }
+  }
+
+  if (s_numeric_length == 0U)
+  {
+    s_numeric_buffer[s_numeric_length++] = '0';
+  }
+  if (s_numeric_length < (UI_NUMERIC_BUFFER_SIZE - 1U))
+  {
+    s_numeric_buffer[s_numeric_length++] = '.';
+    s_numeric_buffer[s_numeric_length] = '\0';
+    UI_RefreshNumericDisplay();
+  }
+}
+
+static void UI_SetNumericSign(uint8_t negative)
+{
+  uint8_t index;
+
+  if (s_parameter != UI_PARAM_OFFSET)
+  {
+    return;
+  }
+
+  if (negative != 0U)
+  {
+    if ((s_numeric_length > 0U) && (s_numeric_buffer[0] == '-'))
+    {
+      return;
+    }
+    if (s_numeric_length >= (UI_NUMERIC_BUFFER_SIZE - 1U))
+    {
+      return;
+    }
+    for (index = s_numeric_length; index > 0U; --index)
+    {
+      s_numeric_buffer[index] = s_numeric_buffer[index - 1U];
+    }
+    s_numeric_buffer[0] = '-';
+    ++s_numeric_length;
+    s_numeric_buffer[s_numeric_length] = '\0';
+  }
+  else if ((s_numeric_length > 0U) && (s_numeric_buffer[0] == '-'))
+  {
+    for (index = 0U; index < s_numeric_length; ++index)
+    {
+      s_numeric_buffer[index] = s_numeric_buffer[index + 1U];
+    }
+    --s_numeric_length;
+  }
+  UI_RefreshNumericDisplay();
+}
+
+static void UI_DeleteNumericCharacter(void)
+{
+  if (s_numeric_length > 0U)
+  {
+    --s_numeric_length;
+    s_numeric_buffer[s_numeric_length] = '\0';
+    UI_RefreshNumericDisplay();
+  }
+  else
+  {
+    s_mode = UI_MODE_EDIT;
+    UI_RefreshEditDisplay();
+  }
+}
+
+static uint8_t UI_ParseNumericValue(double *value)
+{
+  uint8_t index = 0U;
+  uint8_t digit_seen = 0U;
+  uint8_t decimal_seen = 0U;
+  uint8_t negative = 0U;
+  double result = 0.0;
+  double decimal_scale = 0.1;
+
+  if ((value == NULL) || (s_numeric_length == 0U))
+  {
+    return 0U;
+  }
+  if (s_numeric_buffer[0] == '-')
+  {
+    negative = 1U;
+    index = 1U;
+  }
+
+  for (; index < s_numeric_length; ++index)
+  {
+    char character = s_numeric_buffer[index];
+    if (character == '.')
+    {
+      if (decimal_seen != 0U)
+      {
+        return 0U;
+      }
+      decimal_seen = 1U;
+    }
+    else if ((character >= '0') && (character <= '9'))
+    {
+      uint8_t digit = (uint8_t)(character - '0');
+      digit_seen = 1U;
+      if (decimal_seen == 0U)
+      {
+        result = result * 10.0 + (double)digit;
+      }
+      else
+      {
+        result += (double)digit * decimal_scale;
+        decimal_scale *= 0.1;
+      }
+    }
+    else
+    {
+      return 0U;
+    }
+  }
+
+  if (digit_seen == 0U)
+  {
+    return 0U;
+  }
+  *value = (negative != 0U) ? -result : result;
+  return 1U;
+}
+
+static void UI_CommitNumericInput(void)
+{
+  channel_state_t *channel = Generator_State_GetActive(&s_state);
+  double value;
+  uint8_t valid = UI_ParseNumericValue(&value);
+
+  if (valid != 0U)
+  {
+    if ((s_parameter == UI_PARAM_FREQUENCY) &&
+        (value >= UI_FREQ_MIN_HZ) && (value <= UI_FREQ_MAX_HZ))
+    {
+      channel->frequency_hz = value;
+    }
+    else if ((s_parameter == UI_PARAM_AMPLITUDE) &&
+             (value >= UI_AMPLITUDE_MIN_VPP) &&
+             (value <= UI_AMPLITUDE_MAX_VPP))
+    {
+      channel->amplitude_vpp = (float)value;
+    }
+    else if ((s_parameter == UI_PARAM_OFFSET) &&
+             (value >= UI_OFFSET_MIN_V) && (value <= UI_OFFSET_MAX_V))
+    {
+      channel->offset_v = (float)value;
+    }
+    else if ((s_parameter == UI_PARAM_PHASE) &&
+             (value >= 0.0) && (value < 360.0))
+    {
+      channel->phase_deg = (float)value;
+    }
+    else
+    {
+      valid = 0U;
+    }
+  }
+
+  if (valid == 0U)
+  {
+    UI_ShowToast("VALUE OUT OF RANGE", lv_color_hex(UI_COLOR_WARNING));
+    return;
+  }
+
+  s_mode = UI_MODE_EDIT;
+  UI_ShowMain();
+  UI_ShowToast("VALUE APPLIED", UI_ChannelColor(s_state.active_channel));
+}
+
 static void UI_AdjustParameter(int8_t direction)
 {
   channel_state_t *channel = Generator_State_GetActive(&s_state);
@@ -1331,6 +1580,8 @@ void UI_SignalGenerator_Init(void)
   s_page = UI_PAGE_MAIN;
   s_mode = UI_MODE_NAV;
   s_toast = NULL;
+  s_numeric_length = 0U;
+  s_numeric_buffer[0] = '\0';
   UI_ShowMain();
 }
 
@@ -1348,6 +1599,50 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
 {
   channel_state_t *channel = Generator_State_GetActive(&s_state);
 
+  if (s_mode == UI_MODE_NUM_INPUT)
+  {
+    if ((command >= UI_CMD_NUM_0) && (command <= UI_CMD_NUM_9))
+    {
+      UI_AppendNumericDigit((uint8_t)(command - UI_CMD_NUM_0));
+    }
+    else if (command == UI_CMD_DECIMAL_POINT)
+    {
+      UI_AppendNumericDecimal();
+    }
+    else if (command == UI_CMD_ENCODER_CCW)
+    {
+      UI_SetNumericSign(1U);
+    }
+    else if (command == UI_CMD_ENCODER_CW)
+    {
+      UI_SetNumericSign(0U);
+    }
+    else if ((command == UI_CMD_ENCODER_PRESS) ||
+             (command == UI_CMD_ENTER))
+    {
+      UI_CommitNumericInput();
+    }
+    else if (command == UI_CMD_DELETE)
+    {
+      UI_DeleteNumericCharacter();
+    }
+    else if ((command == UI_CMD_BACK) || (command == UI_CMD_HOME))
+    {
+      s_mode = UI_MODE_EDIT;
+      UI_HandleBack();
+    }
+    return;
+  }
+
+  if (command == UI_CMD_DELETE)
+  {
+    UI_HandleBack();
+    return;
+  }
+  if (command == UI_CMD_DECIMAL_POINT)
+  {
+    command = UI_CMD_WAVE_NEXT;
+  }
   if (command == UI_CMD_BACK)
   {
     UI_HandleBack();
@@ -1438,6 +1733,31 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
                                                    : s_channel_colors[3]));
     return;
   }
+  if ((command == UI_CMD_PARAM_PREV) ||
+      (command == UI_CMD_PARAM_NEXT))
+  {
+    int32_t direction = (command == UI_CMD_PARAM_NEXT) ? 1 : -1;
+    int32_t next = (int32_t)s_parameter + direction;
+
+    if (next < 0)
+    {
+      next = UI_PARAM_COUNT - 1;
+    }
+    else if (next >= UI_PARAM_COUNT)
+    {
+      next = 0;
+    }
+    s_parameter = (UI_Parameter)next;
+    if (s_page == UI_PAGE_EDIT)
+    {
+      UI_StartEdit(s_parameter);
+    }
+    else
+    {
+      UI_ShowMain();
+    }
+    return;
+  }
   if ((command == UI_CMD_ENCODER_CW) ||
       (command == UI_CMD_ENCODER_CCW) ||
       (command == UI_CMD_ENCODER_PRESS) ||
@@ -1464,10 +1784,9 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
     }
     return;
   }
-  if ((command >= UI_CMD_NUM_1) && (command <= UI_CMD_NUM_4))
+  if ((command >= UI_CMD_NUM_0) && (command <= UI_CMD_NUM_9))
   {
-    s_state.active_channel = (uint8_t)(command - UI_CMD_NUM_1);
-    UI_ShowMain();
+    UI_AppendNumericDigit((uint8_t)(command - UI_CMD_NUM_0));
     return;
   }
   if ((s_page == UI_PAGE_STEP_SELECT) && (command == UI_CMD_ENTER))

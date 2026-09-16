@@ -8,6 +8,9 @@
 #define UI_INPUT_LONG_PRESS_MS 1000U
 #define UI_INPUT_ENCODER_DEBOUNCE_MS 25U
 #define UI_INPUT_ENCODER_MAX_EVENTS_PER_PROCESS 8
+#define UI_IR_DUPLICATE_SUPPRESS_MS 180U
+#define UI_IR_REPEAT_START_MS 450U
+#define UI_IR_REPEAT_PERIOD_MS 100U
 
 #define UI_IR_KEY_POWER 69U
 #define UI_IR_KEY_UP 70U
@@ -42,6 +45,10 @@ static UI_ButtonTracker s_encoder_key;
 static uint8_t s_encoder_raw;
 static uint8_t s_encoder_stable;
 static uint32_t s_encoder_changed_at_ms;
+static uint8_t s_ir_last_key;
+static uint8_t s_ir_last_key_valid;
+static uint32_t s_ir_pressed_at_ms;
+static uint32_t s_ir_last_dispatch_ms;
 
 static UI_Command UI_Input_MapIRKey(uint8_t key, uint8_t is_repeat)
 {
@@ -50,21 +57,23 @@ static UI_Command UI_Input_MapIRKey(uint8_t key, uint8_t is_repeat)
     case UI_IR_KEY_POWER:
       return (is_repeat == 0U) ? UI_CMD_OUTPUT_TOGGLE : UI_CMD_NONE;
     case UI_IR_KEY_UP:
-    case UI_IR_KEY_VOLUME_UP:
-      return UI_CMD_ENCODER_CW;
+      return UI_CMD_CH_PREV;
     case UI_IR_KEY_DOWN:
+      return UI_CMD_CH_NEXT;
+    case UI_IR_KEY_LEFT:
+      return UI_CMD_PARAM_PREV;
+    case UI_IR_KEY_RIGHT:
+      return UI_CMD_PARAM_NEXT;
     case UI_IR_KEY_VOLUME_DOWN:
       return UI_CMD_ENCODER_CCW;
-    case UI_IR_KEY_LEFT:
-      return UI_CMD_CH_PREV;
-    case UI_IR_KEY_RIGHT:
-      return UI_CMD_CH_NEXT;
+    case UI_IR_KEY_VOLUME_UP:
+      return UI_CMD_ENCODER_CW;
     case UI_IR_KEY_PLAY:
       return (is_repeat == 0U) ? UI_CMD_ENCODER_PRESS : UI_CMD_NONE;
     case UI_IR_KEY_HOME:
-      return (is_repeat == 0U) ? UI_CMD_HOME : UI_CMD_NONE;
+      return (is_repeat == 0U) ? UI_CMD_DECIMAL_POINT : UI_CMD_NONE;
     case UI_IR_KEY_DELETE:
-      return (is_repeat == 0U) ? UI_CMD_BACK : UI_CMD_NONE;
+      return (is_repeat == 0U) ? UI_CMD_DELETE : UI_CMD_NONE;
     case UI_IR_KEY_0:
       return (is_repeat == 0U) ? UI_CMD_NUM_0 : UI_CMD_NONE;
     case UI_IR_KEY_1:
@@ -177,6 +186,10 @@ void UI_Input_Init(void)
   s_encoder_key.was_pressed = s_encoder_stable;
   s_encoder_key.long_sent = 0U;
   s_encoder_key.pressed_at_ms = now;
+  s_ir_last_key = 0U;
+  s_ir_last_key_valid = 0U;
+  s_ir_pressed_at_ms = now;
+  s_ir_last_dispatch_ms = now;
 }
 
 void UI_Input_Process(void)
@@ -236,8 +249,37 @@ void UI_Input_Process(void)
 
   while (BSP_IR_Remote_TakeEvent(&ir_event) != 0U)
   {
-    (void)UI_CommandQueue_Post(
-        UI_Input_MapIRKey(ir_event.key, ir_event.is_repeat));
+    UI_Command command;
+
+    now = HAL_GetTick();
+    if (ir_event.is_repeat == 0U)
+    {
+      if ((s_ir_last_key_valid != 0U) &&
+          (ir_event.key == s_ir_last_key) &&
+          ((now - s_ir_last_dispatch_ms) < UI_IR_DUPLICATE_SUPPRESS_MS))
+      {
+        continue;
+      }
+
+      s_ir_last_key = ir_event.key;
+      s_ir_last_key_valid = 1U;
+      s_ir_pressed_at_ms = now;
+      s_ir_last_dispatch_ms = now;
+    }
+    else
+    {
+      if ((s_ir_last_key_valid == 0U) ||
+          (ir_event.key != s_ir_last_key) ||
+          ((now - s_ir_pressed_at_ms) < UI_IR_REPEAT_START_MS) ||
+          ((now - s_ir_last_dispatch_ms) < UI_IR_REPEAT_PERIOD_MS))
+      {
+        continue;
+      }
+      s_ir_last_dispatch_ms = now;
+    }
+
+    command = UI_Input_MapIRKey(ir_event.key, ir_event.is_repeat);
+    (void)UI_CommandQueue_Post(command);
   }
 }
 
