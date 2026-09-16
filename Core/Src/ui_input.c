@@ -57,13 +57,13 @@ static UI_Command UI_Input_MapIRKey(uint8_t key, uint8_t is_repeat)
     case UI_IR_KEY_POWER:
       return (is_repeat == 0U) ? UI_CMD_OUTPUT_TOGGLE : UI_CMD_NONE;
     case UI_IR_KEY_UP:
-      return UI_CMD_CH_PREV;
-    case UI_IR_KEY_DOWN:
-      return UI_CMD_CH_NEXT;
-    case UI_IR_KEY_LEFT:
       return UI_CMD_PARAM_PREV;
-    case UI_IR_KEY_RIGHT:
+    case UI_IR_KEY_DOWN:
       return UI_CMD_PARAM_NEXT;
+    case UI_IR_KEY_LEFT:
+      return UI_CMD_CH_PREV;
+    case UI_IR_KEY_RIGHT:
+      return UI_CMD_CH_NEXT;
     case UI_IR_KEY_VOLUME_DOWN:
       return UI_CMD_ENCODER_CCW;
     case UI_IR_KEY_VOLUME_UP:
