@@ -68,7 +68,7 @@ AD9959 模块还需要独立、足量的 5 V 供电（手册给出最大约 400 
 | Data Size | 8 bit |
 | First Bit | MSB first |
 | CPOL / CPHA | Low / 1 Edge（SPI Mode 0） |
-| Baud Prescaler | /2，SCK = 84 MHz / 2 = 42 MHz |
+| Baud Prescaler | /16，硬件 SPI 配置值为 5.25 Mbit/s；当前 AD9959 初始化后改用 GPIO 模拟串行，因此该分频值不决定 DDS 写时钟 |
 | CRC | Disabled |
 | DMA / NVIC | 本轮不启用 |
 
