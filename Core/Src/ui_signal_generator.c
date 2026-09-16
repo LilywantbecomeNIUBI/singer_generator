@@ -1553,7 +1553,7 @@ static void UI_ShowUnitSelect(void)
 
     (void)snprintf(text,
                    sizeof(text),
-                   "%u  %s",
+                   "%u / %s",
                    (unsigned int)(index + 1U),
                    UI_GetUnitLabel(index));
     button = UI_CreateButton(lv_screen_active(),
