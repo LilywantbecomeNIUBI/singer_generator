@@ -4,7 +4,6 @@
 #include "generator_state.h"
 #include "ui_signal_generator.h"
 
-#include <math.h>
 #include <string.h>
 
 #define UI_ADAPTER_CHANNEL_COUNT 2U
@@ -14,17 +13,18 @@ static App_SignalChannelConfig s_last_applied[UI_ADAPTER_CHANNEL_COUNT];
 static uint8_t s_have_last;
 static uint8_t s_last_apply_ok;
 
-static uint32_t UI_Adapter_FrequencyToHz(double frequency_hz)
+static uint8_t UI_Adapter_FrequencyToHz(double frequency_hz,
+                                        uint32_t *frequency_out_hz)
 {
-  if (frequency_hz < (double)APP_SIGNAL_GENERATOR_MIN_FREQUENCY_HZ)
+  if ((frequency_out_hz == NULL) ||
+      (frequency_hz < (double)APP_SIGNAL_GENERATOR_MIN_FREQUENCY_HZ) ||
+      (frequency_hz > (double)APP_SIGNAL_GENERATOR_MAX_FREQUENCY_HZ))
   {
-    return APP_SIGNAL_GENERATOR_MIN_FREQUENCY_HZ;
+    return 0U;
   }
-  if (frequency_hz > (double)APP_SIGNAL_GENERATOR_MAX_FREQUENCY_HZ)
-  {
-    return APP_SIGNAL_GENERATOR_MAX_FREQUENCY_HZ;
-  }
-  return (uint32_t)(frequency_hz + 0.5);
+
+  *frequency_out_hz = (uint32_t)(frequency_hz + 0.5);
+  return 1U;
 }
 
 static uint16_t UI_Adapter_AmplitudeToASF(float amplitude_vpp,
@@ -93,7 +93,12 @@ static uint8_t UI_Adapter_BuildChannel(const channel_state_t *ui,
     return 0U;
   }
 
-  out->frequency_hz = UI_Adapter_FrequencyToHz(ui->frequency_hz);
+  if (UI_Adapter_FrequencyToHz(ui->frequency_hz,
+                               &out->frequency_hz) == 0U)
+  {
+    return 0U;
+  }
+
   out->amplitude = UI_Adapter_AmplitudeToASF(ui->amplitude_vpp,
                                              ui->output_enable ? 1U : 0U);
   out->phase_mdeg = UI_Adapter_PhaseToMilliDegrees(ui->phase_deg);
