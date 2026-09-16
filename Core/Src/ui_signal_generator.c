@@ -77,6 +77,8 @@ static UI_Parameter s_parameter;
 static uint8_t s_step_selection;
 static lv_obj_t *s_toast;
 static uint32_t s_toast_until_ms;
+static lv_obj_t *s_edit_graph;
+static lv_obj_t *s_edit_value_label;
 static lv_point_precise_t s_preview_points[UI_PREVIEW_POINT_CAPACITY];
 static lv_point_precise_t s_edit_wave_points[UI_EDIT_WAVE_POINT_CAPACITY];
 
@@ -103,6 +105,8 @@ static void UI_ClearScreen(void)
   lv_obj_t *screen = lv_screen_active();
 
   s_toast = NULL;
+  s_edit_graph = NULL;
+  s_edit_value_label = NULL;
   lv_obj_clean(screen);
   lv_obj_set_style_bg_color(screen,
                             lv_color_hex(UI_COLOR_BACKGROUND),
@@ -163,6 +167,22 @@ static lv_obj_t *UI_CreateButton(lv_obj_t *parent,
     lv_obj_add_state(button, LV_STATE_DISABLED);
   }
   return button;
+}
+
+static void UI_EnableButtonRepeat(lv_obj_t *button, UI_Command command)
+{
+  (void)lv_obj_remove_event_cb_with_user_data(
+      button,
+      UI_CommandEvent,
+      (void *)(uintptr_t)command);
+  lv_obj_add_event_cb(button,
+                      UI_CommandEvent,
+                      LV_EVENT_SHORT_CLICKED,
+                      (void *)(uintptr_t)command);
+  lv_obj_add_event_cb(button,
+                      UI_CommandEvent,
+                      LV_EVENT_LONG_PRESSED_REPEAT,
+                      (void *)(uintptr_t)command);
 }
 
 static void UI_FormatFrequency(double frequency_hz,
@@ -667,7 +687,7 @@ static void UI_CreateWaveformPreview(const channel_state_t *channel)
   }
 }
 
-static void UI_CreateEditGraph(const channel_state_t *channel)
+static lv_obj_t *UI_CreateEditGraph(const channel_state_t *channel)
 {
   lv_obj_t *graph = lv_obj_create(lv_screen_active());
   lv_color_t reference_color = lv_color_hex(UI_COLOR_BORDER);
@@ -750,6 +770,7 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
                              "OFFSET",
                              wave_color);
   }
+  return graph;
 }
 
 static void UI_ShowMain(void)
@@ -826,6 +847,8 @@ static void UI_ShowMain(void)
 static void UI_ShowEdit(void)
 {
   const channel_state_t *channel = Generator_State_GetActiveConst(&s_state);
+  lv_obj_t *decrement_button;
+  lv_obj_t *increment_button;
   lv_obj_t *value;
   lv_obj_t *step;
   char text[48];
@@ -834,29 +857,52 @@ static void UI_ShowEdit(void)
   s_page = UI_PAGE_EDIT;
   s_mode = UI_MODE_EDIT;
   (void)UI_CreateTopBar(s_parameter_names[s_parameter]);
-  UI_CreateEditGraph(channel);
+  s_edit_graph = UI_CreateEditGraph(channel);
 
   UI_FormatParameter(s_parameter, channel, text, sizeof(text));
   value = UI_CreateLabel(lv_screen_active(), text,
                          UI_ChannelColor(s_state.active_channel));
   lv_obj_set_style_text_font(value, &lv_font_montserrat_18, LV_PART_MAIN);
   lv_obj_set_pos(value, 8, 126);
+  s_edit_value_label = value;
 
   UI_FormatStep(s_parameter, text, sizeof(text));
   step = UI_CreateLabel(lv_screen_active(), "", lv_color_hex(UI_COLOR_TEXT));
   lv_label_set_text_fmt(step, "Step  %s", text);
   lv_obj_align(step, LV_ALIGN_TOP_RIGHT, -8, 130);
 
-  (void)UI_CreateButton(lv_screen_active(), "-", 8, 151, 54, 45,
-                        UI_CMD_ENCODER_CCW, 1U);
+  decrement_button = UI_CreateButton(lv_screen_active(), "-", 8, 151, 54, 45,
+                                     UI_CMD_ENCODER_CCW, 1U);
+  UI_EnableButtonRepeat(decrement_button, UI_CMD_ENCODER_CCW);
   (void)UI_CreateButton(lv_screen_active(), "Step", 68, 151, 82, 45,
                         UI_CMD_ENCODER_LONG, 1U);
-  (void)UI_CreateButton(lv_screen_active(), "+", 156, 151, 54, 45,
-                        UI_CMD_ENCODER_CW, 1U);
+  increment_button = UI_CreateButton(lv_screen_active(), "+", 156, 151, 54, 45,
+                                     UI_CMD_ENCODER_CW, 1U);
+  UI_EnableButtonRepeat(increment_button, UI_CMD_ENCODER_CW);
   (void)UI_CreateButton(lv_screen_active(), "OK", 216, 151, 96, 45,
                         UI_CMD_ENCODER_PRESS, 1U);
   (void)UI_CreateButton(lv_screen_active(), "Cancel / Back", 8, 204, 304, 30,
                         UI_CMD_BACK, 1U);
+}
+
+static void UI_RefreshEditDisplay(void)
+{
+  const channel_state_t *channel = Generator_State_GetActiveConst(&s_state);
+  char text[48];
+
+  if ((s_page != UI_PAGE_EDIT) || (s_edit_value_label == NULL))
+  {
+    return;
+  }
+
+  if (s_edit_graph != NULL)
+  {
+    lv_obj_delete(s_edit_graph);
+  }
+  s_edit_graph = UI_CreateEditGraph(channel);
+
+  UI_FormatParameter(s_parameter, channel, text, sizeof(text));
+  lv_label_set_text(s_edit_value_label, text);
 }
 
 static uint8_t UI_GetStepCount(void)
@@ -1240,7 +1286,7 @@ static void UI_HandleEncoder(UI_Command command)
         (command == UI_CMD_ENCODER_CCW))
     {
       UI_AdjustParameter(direction);
-      UI_ShowEdit();
+      UI_RefreshEditDisplay();
     }
     else if (command == UI_CMD_ENCODER_PRESS)
     {
