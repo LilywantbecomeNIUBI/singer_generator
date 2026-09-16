@@ -9,14 +9,19 @@
 #define BSP_TOUCH_COMMAND_Y 0x90U
 #define BSP_TOUCH_SAMPLE_COUNT 5U
 
+/*
+ * The LCD uses ST7789 MADCTL 0xA8 in landscape mode (MY | MV | BGR).
+ * Therefore logical X comes from the raw Y channel in reverse order, while
+ * logical Y comes from the raw X channel in its normal order.
+ */
 static BSP_TouchCalibration s_calibration = {
     200U,
     3900U,
     200U,
     3900U,
     1U,
-    0U,
-    1U};
+    1U,
+    0U};
 
 static void BSP_Touch_ClockDelay(void)
 {
