@@ -75,6 +75,9 @@ uint8_t App_SignalGenerator_Init(void);
 uint8_t App_SignalGenerator_ApplyChannels(
     const App_SignalChannelConfig
         channels[APP_SIGNAL_GENERATOR_CHANNEL_COUNT]);
+uint8_t App_SignalGenerator_ApplyChannel(
+    uint32_t channel_index,
+    const App_SignalChannelConfig *config);
 uint8_t App_SignalGenerator_ApplyDualChannel(
     const App_SignalChannelConfig *channel_1,
     const App_SignalChannelConfig *channel_2);

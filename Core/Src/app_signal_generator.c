@@ -268,6 +268,43 @@ uint8_t App_SignalGenerator_ApplyChannels(
   return 1U;
 }
 
+uint8_t App_SignalGenerator_ApplyChannel(
+    uint32_t channel_index,
+    const App_SignalChannelConfig *config)
+{
+  AD9959_ChannelConfig dds_config;
+  AD9959_Status status;
+
+  if ((channel_index >= APP_SIGNAL_GENERATOR_CHANNEL_COUNT) ||
+      (App_IsValidChannelConfig(config) == 0U))
+  {
+    return 0U;
+  }
+
+  dds_config.channel = s_ad9959_channels[channel_index];
+  dds_config.frequency_hz = config->frequency_hz;
+  dds_config.amplitude = config->amplitude;
+  dds_config.phase_mdeg = config->phase_mdeg;
+
+  App_SignalGenerator_StopSweep();
+  g_app_m1_status = APP_M4_CONFIGURING;
+  status = AD9959_ConfigureChannelsSynchronized(&dds_config, 1U);
+  if (status != AD9959_OK)
+  {
+    g_app_m1_status = APP_M1_ERROR;
+    return 0U;
+  }
+
+  g_app_signal_channels[channel_index] = *config;
+  if (channel_index == 0U)
+  {
+    g_app_m1_frequency_hz = config->frequency_hz;
+  }
+  g_app_signal_pattern = APP_SIGNAL_PATTERN_CUSTOM;
+  g_app_m1_status = APP_M4_SYNCHRONIZED_CONFIG_SENT;
+  return 1U;
+}
+
 uint8_t App_SignalGenerator_ApplyDualChannel(
     const App_SignalChannelConfig *channel_1,
     const App_SignalChannelConfig *channel_2)

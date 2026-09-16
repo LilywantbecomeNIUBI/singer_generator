@@ -18,7 +18,7 @@ void Generator_State_Init(generator_state_t *state)
     state->ch[channel].offset_v = 0.0F;
     state->ch[channel].phase_deg = (float)channel * 90.0F;
     state->ch[channel].waveform = WAVE_SINE;
-    state->ch[channel].output_enable = false;
+    state->ch[channel].output_enable = (channel == 0U);
   }
 
   state->active_channel = 0U;
