@@ -12,7 +12,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
-
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
@@ -63,6 +62,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/ui_command.c
     Core/Src/ui_input.c
     Core/Src/ui_signal_generator.c
+    Core/Src/ui_signal_adapter.c
     Core/Src/lv_port_display.c
     Core/Src/lv_port_input.c
     Core/Src/app_hmi.c

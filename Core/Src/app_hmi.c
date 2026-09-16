@@ -6,6 +6,7 @@
 #include "lvgl.h"
 #include "ui_command.h"
 #include "ui_input.h"
+#include "ui_signal_adapter.h"
 #include "ui_signal_generator.h"
 #include "usart.h"
 
@@ -53,6 +54,8 @@ uint8_t App_HMI_Init(void)
   UI_CommandQueue_Init();
   UI_Input_Init();
   UI_SignalGenerator_Init();
+  UI_SignalAdapter_Init();
+  UI_SignalAdapter_Process();
   s_last_handler_ms = HAL_GetTick();
   s_hmi_ready = 1U;
 
@@ -85,8 +88,10 @@ void App_HMI_Process(void)
   while (UI_CommandQueue_Get(&command) != 0U)
   {
     UI_SignalGenerator_Dispatch(command);
+    UI_SignalAdapter_Process();
   }
   UI_SignalGenerator_Process();
+  UI_SignalAdapter_Process();
   (void)lv_timer_handler();
 }
 
