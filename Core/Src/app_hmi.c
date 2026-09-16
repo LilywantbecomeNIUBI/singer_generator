@@ -1,10 +1,12 @@
 #include "app_hmi.h"
 
-#include "bsp_key.h"
 #include "bsp_lcd.h"
 #include "lv_port_display.h"
 #include "lv_port_input.h"
 #include "lvgl.h"
+#include "ui_command.h"
+#include "ui_input.h"
+#include "ui_signal_generator.h"
 #include "usart.h"
 
 #include <stdio.h>
@@ -33,28 +35,6 @@ static void App_HMI_ConsoleWrite(const char *message)
                          100U);
 }
 
-static void App_HMI_CreateBringUpScreen(void)
-{
-  lv_obj_t *screen = lv_screen_active();
-  lv_obj_t *title;
-  lv_obj_t *details;
-
-  lv_obj_set_style_bg_color(screen, lv_color_hex(0x101820U), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
-
-  title = lv_label_create(screen);
-  lv_label_set_text(title, "LVGL display ready");
-  lv_obj_set_style_text_color(title, lv_color_hex(0x57D3FFU), LV_PART_MAIN);
-  lv_obj_align(title, LV_ALIGN_CENTER, 0, -18);
-
-  details = lv_label_create(screen);
-  lv_label_set_text_fmt(details,
-                        "LVGL 9.5.0 | %s | 320 x 240",
-                        BSP_LCD_GetControllerName());
-  lv_obj_set_style_text_color(details, lv_color_hex(0xE8EEF2U), LV_PART_MAIN);
-  lv_obj_align(details, LV_ALIGN_CENTER, 0, 18);
-}
-
 uint8_t App_HMI_Init(void)
 {
   char message[80];
@@ -70,7 +50,9 @@ uint8_t App_HMI_Init(void)
   }
 
   LV_Port_Input_Init(LV_Port_Display_Get());
-  App_HMI_CreateBringUpScreen();
+  UI_CommandQueue_Init();
+  UI_Input_Init();
+  UI_SignalGenerator_Init();
   s_last_handler_ms = HAL_GetTick();
   s_hmi_ready = 1U;
 
@@ -85,6 +67,7 @@ uint8_t App_HMI_Init(void)
 void App_HMI_Process(void)
 {
   uint32_t now;
+  UI_Command command;
 
   if (s_hmi_ready == 0U)
   {
@@ -98,11 +81,21 @@ void App_HMI_Process(void)
   }
 
   s_last_handler_ms = now;
-  BSP_Key_Process();
+  UI_Input_Process();
+  while (UI_CommandQueue_Get(&command) != 0U)
+  {
+    UI_SignalGenerator_Dispatch(command);
+  }
+  UI_SignalGenerator_Process();
   (void)lv_timer_handler();
 }
 
 uint8_t App_HMI_IsReady(void)
 {
   return s_hmi_ready;
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t gpio_pin)
+{
+  UI_Input_EXTI_Callback(gpio_pin);
 }
