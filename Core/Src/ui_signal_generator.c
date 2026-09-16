@@ -1464,6 +1464,12 @@ void UI_SignalGenerator_Dispatch(UI_Command command)
     }
     return;
   }
+  if ((command >= UI_CMD_NUM_1) && (command <= UI_CMD_NUM_4))
+  {
+    s_state.active_channel = (uint8_t)(command - UI_CMD_NUM_1);
+    UI_ShowMain();
+    return;
+  }
   if ((s_page == UI_PAGE_STEP_SELECT) && (command == UI_CMD_ENTER))
   {
     UI_ApplyStepSelection();

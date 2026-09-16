@@ -58,6 +58,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/bsp_touch_hr2046.c
     Core/Src/bsp_key.c
     Core/Src/bsp_encoder.c
+    Core/Src/bsp_ir_remote.c
     Core/Src/generator_state.c
     Core/Src/ui_command.c
     Core/Src/ui_input.c

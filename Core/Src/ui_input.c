@@ -1,12 +1,34 @@
 #include "ui_input.h"
 
 #include "bsp_encoder.h"
+#include "bsp_ir_remote.h"
 #include "bsp_key.h"
 #include "main.h"
 
 #define UI_INPUT_LONG_PRESS_MS 1000U
 #define UI_INPUT_ENCODER_DEBOUNCE_MS 25U
 #define UI_INPUT_ENCODER_MAX_EVENTS_PER_PROCESS 8
+
+#define UI_IR_KEY_POWER 69U
+#define UI_IR_KEY_UP 70U
+#define UI_IR_KEY_PLAY 64U
+#define UI_IR_KEY_HOME 71U
+#define UI_IR_KEY_RIGHT 67U
+#define UI_IR_KEY_LEFT 68U
+#define UI_IR_KEY_VOLUME_DOWN 7U
+#define UI_IR_KEY_DOWN 21U
+#define UI_IR_KEY_VOLUME_UP 9U
+#define UI_IR_KEY_1 22U
+#define UI_IR_KEY_2 25U
+#define UI_IR_KEY_3 13U
+#define UI_IR_KEY_4 12U
+#define UI_IR_KEY_5 24U
+#define UI_IR_KEY_6 94U
+#define UI_IR_KEY_7 8U
+#define UI_IR_KEY_8 28U
+#define UI_IR_KEY_9 90U
+#define UI_IR_KEY_0 66U
+#define UI_IR_KEY_DELETE 74U
 
 typedef struct
 {
@@ -20,6 +42,53 @@ static UI_ButtonTracker s_encoder_key;
 static uint8_t s_encoder_raw;
 static uint8_t s_encoder_stable;
 static uint32_t s_encoder_changed_at_ms;
+
+static UI_Command UI_Input_MapIRKey(uint8_t key, uint8_t is_repeat)
+{
+  switch (key)
+  {
+    case UI_IR_KEY_POWER:
+      return (is_repeat == 0U) ? UI_CMD_OUTPUT_TOGGLE : UI_CMD_NONE;
+    case UI_IR_KEY_UP:
+    case UI_IR_KEY_VOLUME_UP:
+      return UI_CMD_ENCODER_CW;
+    case UI_IR_KEY_DOWN:
+    case UI_IR_KEY_VOLUME_DOWN:
+      return UI_CMD_ENCODER_CCW;
+    case UI_IR_KEY_LEFT:
+      return UI_CMD_CH_PREV;
+    case UI_IR_KEY_RIGHT:
+      return UI_CMD_CH_NEXT;
+    case UI_IR_KEY_PLAY:
+      return (is_repeat == 0U) ? UI_CMD_ENCODER_PRESS : UI_CMD_NONE;
+    case UI_IR_KEY_HOME:
+      return (is_repeat == 0U) ? UI_CMD_HOME : UI_CMD_NONE;
+    case UI_IR_KEY_DELETE:
+      return (is_repeat == 0U) ? UI_CMD_BACK : UI_CMD_NONE;
+    case UI_IR_KEY_0:
+      return (is_repeat == 0U) ? UI_CMD_NUM_0 : UI_CMD_NONE;
+    case UI_IR_KEY_1:
+      return (is_repeat == 0U) ? UI_CMD_NUM_1 : UI_CMD_NONE;
+    case UI_IR_KEY_2:
+      return (is_repeat == 0U) ? UI_CMD_NUM_2 : UI_CMD_NONE;
+    case UI_IR_KEY_3:
+      return (is_repeat == 0U) ? UI_CMD_NUM_3 : UI_CMD_NONE;
+    case UI_IR_KEY_4:
+      return (is_repeat == 0U) ? UI_CMD_NUM_4 : UI_CMD_NONE;
+    case UI_IR_KEY_5:
+      return (is_repeat == 0U) ? UI_CMD_NUM_5 : UI_CMD_NONE;
+    case UI_IR_KEY_6:
+      return (is_repeat == 0U) ? UI_CMD_NUM_6 : UI_CMD_NONE;
+    case UI_IR_KEY_7:
+      return (is_repeat == 0U) ? UI_CMD_NUM_7 : UI_CMD_NONE;
+    case UI_IR_KEY_8:
+      return (is_repeat == 0U) ? UI_CMD_NUM_8 : UI_CMD_NONE;
+    case UI_IR_KEY_9:
+      return (is_repeat == 0U) ? UI_CMD_NUM_9 : UI_CMD_NONE;
+    default:
+      return UI_CMD_NONE;
+  }
+}
 
 static UI_Command UI_Input_GetShortCommand(BSP_Key key)
 {
@@ -94,6 +163,7 @@ void UI_Input_Init(void)
 
   BSP_Key_Init();
   BSP_Encoder_Init();
+  (void)BSP_IR_Remote_Init();
   for (key = BSP_KEY_0; key < BSP_KEY_COUNT; ++key)
   {
     s_key_trackers[key].was_pressed = BSP_Key_IsPressed(key);
@@ -111,6 +181,7 @@ void UI_Input_Init(void)
 
 void UI_Input_Process(void)
 {
+  BSP_IR_RemoteEvent ir_event;
   BSP_Key key;
   int16_t delta;
   int16_t event_count;
@@ -161,6 +232,12 @@ void UI_Input_Process(void)
     (void)UI_CommandQueue_Post((delta > 0) ? UI_CMD_ENCODER_CW
                                            : UI_CMD_ENCODER_CCW);
     --event_count;
+  }
+
+  while (BSP_IR_Remote_TakeEvent(&ir_event) != 0U)
+  {
+    (void)UI_CommandQueue_Post(
+        UI_Input_MapIRKey(ir_event.key, ir_event.is_repeat));
   }
 }
 
