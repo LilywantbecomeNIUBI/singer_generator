@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "app_hmi.h"
 #include "app_signal_generator.h"
 
 /* USER CODE END Includes */
@@ -98,6 +99,7 @@ int main(void)
   {
     Error_Handler();
   }
+  (void)App_HMI_Init();
 
   /* USER CODE END 2 */
 
@@ -109,6 +111,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     App_SignalGenerator_Process();
+    App_HMI_Process();
   }
   /* USER CODE END 3 */
 }

@@ -90,6 +90,42 @@
       "notes": [
         "Board support header file. Safe for free edits."
       ]
+    },
+    {
+      "path_glob": "Core/Src/lv_port_*.c",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "LVGL port source file. Safe for free edits."
+      ]
+    },
+    {
+      "path_glob": "Core/Inc/lv_port_*.h",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "LVGL port header file. Safe for free edits."
+      ]
+    },
+    {
+      "path_glob": "lv_conf.h",
+      "classification": "user_owned",
+      "generated_by": "user",
+      "editable_strategy": "free_edit",
+      "notes": [
+        "Project-owned LVGL configuration."
+      ]
+    },
+    {
+      "path_glob": "lvgl/**",
+      "classification": "vendor_or_framework",
+      "generated_by": "lvgl",
+      "editable_strategy": "avoid_manual_edit",
+      "notes": [
+        "Vendored LVGL 9.5.0 framework; keep local changes limited to its build entrypoint."
+      ]
     }
   ]
 }

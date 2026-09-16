@@ -36,6 +36,7 @@ add_executable(${CMAKE_PROJECT_NAME})
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
+add_subdirectory(lvgl)
 
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
@@ -46,6 +47,12 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/bsp_ad9959.c
     Core/Src/app_signal_generator.c
+    Core/Src/bsp_lcd.c
+    Core/Src/bsp_touch_hr2046.c
+    Core/Src/bsp_key.c
+    Core/Src/lv_port_display.c
+    Core/Src/lv_port_input.c
+    Core/Src/app_hmi.c
 )
 
 # Add include paths
@@ -64,6 +71,7 @@ list(REMOVE_ITEM CMAKE_C_IMPLICIT_LINK_LIBRARIES ob)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
+    lvgl
 
     # Add user defined libraries
 )
