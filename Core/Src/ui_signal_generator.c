@@ -16,6 +16,9 @@
 #define UI_COLOR_BORDER 0x3A4652U
 #define UI_COLOR_WARNING 0xFF5B5BU
 #define UI_TOAST_DURATION_MS 800U
+#define UI_PREVIEW_POINT_CAPACITY 33U
+#define UI_PREVIEW_WAVE_WIDTH 225
+#define UI_PREVIEW_WAVE_CENTER_Y 12
 
 #define UI_FREQ_MIN_HZ 1.0
 #define UI_FREQ_MAX_HZ 100000000.0
@@ -71,6 +74,7 @@ static UI_Parameter s_parameter;
 static uint8_t s_step_selection;
 static lv_obj_t *s_toast;
 static uint32_t s_toast_until_ms;
+static lv_point_precise_t s_preview_points[UI_PREVIEW_POINT_CAPACITY];
 
 static lv_color_t UI_ChannelColor(uint8_t channel)
 {
@@ -348,6 +352,95 @@ static void UI_ShowToast(const char *text, lv_color_t color)
   s_toast_until_ms = HAL_GetTick() + UI_TOAST_DURATION_MS;
 }
 
+static uint32_t UI_BuildPreviewPoints(waveform_t waveform)
+{
+  static const int8_t sine_offsets[16] = {
+      0, -5, -9, -12, -12, -12, -9, -5,
+      0, 5, 9, 12, 12, 12, 9, 5};
+  static const int8_t triangle_offsets[16] = {
+      0, -3, -6, -9, -12, -9, -6, -3,
+      0, 3, 6, 9, 12, 9, 6, 3};
+  uint32_t index;
+
+  if ((waveform == WAVE_SINE) || (waveform == WAVE_TRIANGLE))
+  {
+    const int8_t *offsets = (waveform == WAVE_SINE)
+                                ? sine_offsets
+                                : triangle_offsets;
+
+    for (index = 0U; index < UI_PREVIEW_POINT_CAPACITY; ++index)
+    {
+      s_preview_points[index].x =
+          (lv_value_precise_t)((UI_PREVIEW_WAVE_WIDTH * (int32_t)index) / 32);
+      s_preview_points[index].y =
+          (lv_value_precise_t)(UI_PREVIEW_WAVE_CENTER_Y + offsets[index % 16U]);
+    }
+    return UI_PREVIEW_POINT_CAPACITY;
+  }
+
+  if (waveform == WAVE_SQUARE)
+  {
+    static const int16_t x[] = {0, 56, 56, 112, 112, 168, 168, 225, 225};
+    static const int8_t y[] = {0, 0, 24, 24, 0, 0, 24, 24, 0};
+
+    for (index = 0U; index < (sizeof(x) / sizeof(x[0])); ++index)
+    {
+      s_preview_points[index].x = (lv_value_precise_t)x[index];
+      s_preview_points[index].y = (lv_value_precise_t)y[index];
+    }
+    return (uint32_t)(sizeof(x) / sizeof(x[0]));
+  }
+
+  {
+    static const int16_t x[] = {
+        0, 14, 14, 42, 42, 112, 126, 126, 154, 154, 225};
+    static const int8_t y[] = {
+        24, 24, 0, 0, 24, 24, 24, 0, 0, 24, 24};
+
+    for (index = 0U; index < (sizeof(x) / sizeof(x[0])); ++index)
+    {
+      s_preview_points[index].x = (lv_value_precise_t)x[index];
+      s_preview_points[index].y = (lv_value_precise_t)y[index];
+    }
+    return (uint32_t)(sizeof(x) / sizeof(x[0]));
+  }
+}
+
+static void UI_CreateWaveformPreview(const channel_state_t *channel)
+{
+  lv_obj_t *preview = lv_obj_create(lv_screen_active());
+  lv_obj_t *label;
+  lv_obj_t *line;
+  uint32_t point_count = UI_BuildPreviewPoints(channel->waveform);
+  lv_color_t wave_color = channel->output_enable
+                              ? UI_ChannelColor(s_state.active_channel)
+                              : lv_color_hex(UI_COLOR_TEXT_MUTED);
+
+  lv_obj_set_pos(preview, 4, 29);
+  lv_obj_set_size(preview, 312, 36);
+  UI_SetObjectBox(preview,
+                  lv_color_hex(UI_COLOR_PANEL),
+                  lv_color_hex(UI_COLOR_BORDER),
+                  2);
+  lv_obj_clear_flag(preview, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(preview, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(preview,
+                      UI_CommandEvent,
+                      LV_EVENT_CLICKED,
+                      (void *)(uintptr_t)UI_CMD_WAVE_PAGE);
+
+  label = UI_CreateLabel(preview, s_wave_names[channel->waveform], wave_color);
+  lv_obj_set_pos(label, 7, 8);
+
+  line = lv_line_create(preview);
+  lv_line_set_points(line, s_preview_points, point_count);
+  lv_obj_set_pos(line, 76, 5);
+  lv_obj_set_style_line_color(line, wave_color, LV_PART_MAIN);
+  lv_obj_set_style_line_width(line, 2, LV_PART_MAIN);
+  lv_obj_set_style_line_rounded(line, true, LV_PART_MAIN);
+  lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
+}
+
 static void UI_ShowMain(void)
 {
   const channel_state_t *channel = Generator_State_GetActiveConst(&s_state);
@@ -358,10 +451,11 @@ static void UI_ShowMain(void)
   s_page = UI_PAGE_MAIN;
   s_mode = s_state.touch_locked ? UI_MODE_LOCKED : UI_MODE_NAV;
   (void)UI_CreateTopBar(NULL);
+  UI_CreateWaveformPreview(channel);
 
   content = lv_obj_create(lv_screen_active());
-  lv_obj_set_pos(content, 0, 28);
-  lv_obj_set_size(content, 320, 168);
+  lv_obj_set_pos(content, 0, 66);
+  lv_obj_set_size(content, 320, 130);
   UI_SetObjectBox(content,
                   lv_color_hex(UI_COLOR_BACKGROUND),
                   lv_color_hex(UI_COLOR_BACKGROUND),
@@ -375,8 +469,8 @@ static void UI_ShowMain(void)
     lv_obj_t *value;
     char value_text[40];
 
-    lv_obj_set_pos(row, 4, 3 + (int32_t)index * 40);
-    lv_obj_set_size(row, 312, 37);
+    lv_obj_set_pos(row, 4, 1 + (int32_t)index * 32);
+    lv_obj_set_size(row, 312, 30);
     UI_SetObjectBox(row,
                     lv_color_hex((index == s_parameter)
                                      ? UI_COLOR_PANEL_SELECTED
@@ -397,7 +491,7 @@ static void UI_ShowMain(void)
                           (index == s_parameter)
                               ? UI_ChannelColor(s_state.active_channel)
                               : lv_color_hex(UI_COLOR_TEXT_MUTED));
-    lv_obj_set_pos(name, 8, 9);
+    lv_obj_set_pos(name, 8, 6);
 
     UI_FormatParameter((UI_Parameter)index,
                        channel,
