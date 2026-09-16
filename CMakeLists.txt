@@ -36,6 +36,13 @@ add_executable(${CMAKE_PROJECT_NAME})
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
+
+# The target firmware only needs the LVGL core. The upstream submodule enables
+# desktop examples, demos and its internal ThorVG build by default, which adds
+# hundreds of unrelated objects to every MCU build.
+set(CONFIG_LV_BUILD_EXAMPLES OFF CACHE BOOL "Build LVGL examples" FORCE)
+set(CONFIG_LV_BUILD_DEMOS OFF CACHE BOOL "Build LVGL demos" FORCE)
+set(CONFIG_LV_USE_THORVG_INTERNAL OFF CACHE BOOL "Build internal ThorVG" FORCE)
 add_subdirectory(lvgl)
 
 # Link directories setup

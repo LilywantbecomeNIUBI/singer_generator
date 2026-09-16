@@ -4,16 +4,67 @@ set(CMAKE_SYSTEM_PROCESSOR          arm)
 set(CMAKE_C_COMPILER_ID GNU)
 set(CMAKE_CXX_COMPILER_ID GNU)
 
-# Some default GCC settings
-# arm-none-eabi- must be part of path environment
-set(TOOLCHAIN_PREFIX                arm-none-eabi-)
+# STM32 VS Code bundles are intentionally not required to be in the global
+# Windows PATH. Prefer the extension-managed GNU toolchain, then fall back to
+# a regular PATH installation for portable command-line builds.
+set(TOOLCHAIN_PREFIX arm-none-eabi-)
+set(_ARM_GNU_BIN_HINTS)
 
-set(CMAKE_C_COMPILER                ${TOOLCHAIN_PREFIX}gcc)
-set(CMAKE_ASM_COMPILER              ${CMAKE_C_COMPILER})
-set(CMAKE_CXX_COMPILER              ${TOOLCHAIN_PREFIX}g++)
-set(CMAKE_LINKER                    ${TOOLCHAIN_PREFIX}g++)
-set(CMAKE_OBJCOPY                   ${TOOLCHAIN_PREFIX}objcopy)
-set(CMAKE_SIZE                      ${TOOLCHAIN_PREFIX}size)
+if(DEFINED ENV{CUBE_BUNDLE_PATH})
+    file(GLOB _CUBE_ARM_GNU_BINS LIST_DIRECTORIES true
+        "$ENV{CUBE_BUNDLE_PATH}/gnu-tools-for-stm32/*/bin"
+    )
+    list(SORT _CUBE_ARM_GNU_BINS COMPARE NATURAL ORDER DESCENDING)
+    list(APPEND _ARM_GNU_BIN_HINTS ${_CUBE_ARM_GNU_BINS})
+endif()
+
+if(CMAKE_HOST_WIN32 AND DEFINED ENV{LOCALAPPDATA})
+    file(GLOB _LOCAL_ARM_GNU_BINS LIST_DIRECTORIES true
+        "$ENV{LOCALAPPDATA}/stm32cube/bundles/gnu-tools-for-stm32/*/bin"
+    )
+    list(SORT _LOCAL_ARM_GNU_BINS COMPARE NATURAL ORDER DESCENDING)
+    list(APPEND _ARM_GNU_BIN_HINTS ${_LOCAL_ARM_GNU_BINS})
+endif()
+
+find_program(ARM_NONE_EABI_GCC
+    NAMES ${TOOLCHAIN_PREFIX}gcc.exe ${TOOLCHAIN_PREFIX}gcc
+    HINTS ${_ARM_GNU_BIN_HINTS}
+)
+
+if(NOT ARM_NONE_EABI_GCC)
+    message(FATAL_ERROR
+        "arm-none-eabi-gcc was not found. Install the STM32 VS Code GNU tools "
+        "bundle or add an Arm GNU toolchain to PATH."
+    )
+endif()
+
+get_filename_component(ARM_NONE_EABI_BIN_DIR "${ARM_NONE_EABI_GCC}" DIRECTORY)
+
+find_program(ARM_NONE_EABI_GXX
+    NAMES ${TOOLCHAIN_PREFIX}g++.exe ${TOOLCHAIN_PREFIX}g++
+    PATHS "${ARM_NONE_EABI_BIN_DIR}"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+find_program(ARM_NONE_EABI_OBJCOPY
+    NAMES ${TOOLCHAIN_PREFIX}objcopy.exe ${TOOLCHAIN_PREFIX}objcopy
+    PATHS "${ARM_NONE_EABI_BIN_DIR}"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+find_program(ARM_NONE_EABI_SIZE
+    NAMES ${TOOLCHAIN_PREFIX}size.exe ${TOOLCHAIN_PREFIX}size
+    PATHS "${ARM_NONE_EABI_BIN_DIR}"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
+
+set(CMAKE_C_COMPILER   "${ARM_NONE_EABI_GCC}" CACHE FILEPATH "C compiler" FORCE)
+set(CMAKE_ASM_COMPILER "${ARM_NONE_EABI_GCC}" CACHE FILEPATH "ASM compiler" FORCE)
+set(CMAKE_CXX_COMPILER "${ARM_NONE_EABI_GXX}" CACHE FILEPATH "C++ compiler" FORCE)
+set(CMAKE_LINKER       "${ARM_NONE_EABI_GXX}" CACHE FILEPATH "Linker" FORCE)
+set(CMAKE_OBJCOPY      "${ARM_NONE_EABI_OBJCOPY}" CACHE FILEPATH "Objcopy" FORCE)
+set(CMAKE_SIZE         "${ARM_NONE_EABI_SIZE}" CACHE FILEPATH "Size tool" FORCE)
 
 set(CMAKE_EXECUTABLE_SUFFIX_ASM     ".elf")
 set(CMAKE_EXECUTABLE_SUFFIX_C       ".elf")
