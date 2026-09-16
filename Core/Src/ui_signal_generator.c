@@ -17,8 +17,8 @@
 #define UI_COLOR_WARNING 0xFF5B5BU
 #define UI_TOAST_DURATION_MS 800U
 #define UI_PREVIEW_POINT_CAPACITY 33U
-#define UI_PREVIEW_WAVE_WIDTH 225
-#define UI_PREVIEW_WAVE_CENTER_Y 12
+#define UI_PREVIEW_WAVE_WIDTH 270
+#define UI_PREVIEW_WAVE_CENTER_Y 18
 #define UI_EDIT_WAVE_POINT_CAPACITY 33U
 #define UI_EDIT_WAVE_WIDTH 210
 #define UI_EDIT_WAVE_ZERO_Y 38
@@ -78,6 +78,7 @@ static uint8_t s_step_selection;
 static lv_obj_t *s_toast;
 static uint32_t s_toast_until_ms;
 static lv_point_precise_t s_preview_points[UI_PREVIEW_POINT_CAPACITY];
+static lv_point_precise_t s_preview_reference_points[UI_PREVIEW_POINT_CAPACITY];
 static lv_point_precise_t s_edit_wave_points[UI_EDIT_WAVE_POINT_CAPACITY];
 static lv_point_precise_t s_edit_reference_points[UI_EDIT_WAVE_POINT_CAPACITY];
 
@@ -357,93 +358,6 @@ static void UI_ShowToast(const char *text, lv_color_t color)
   s_toast_until_ms = HAL_GetTick() + UI_TOAST_DURATION_MS;
 }
 
-static uint32_t UI_BuildPreviewPoints(waveform_t waveform)
-{
-  static const int8_t sine_offsets[16] = {
-      0, -5, -9, -12, -12, -12, -9, -5,
-      0, 5, 9, 12, 12, 12, 9, 5};
-  static const int8_t triangle_offsets[16] = {
-      0, -3, -6, -9, -12, -9, -6, -3,
-      0, 3, 6, 9, 12, 9, 6, 3};
-  uint32_t index;
-
-  if ((waveform == WAVE_SINE) || (waveform == WAVE_TRIANGLE))
-  {
-    const int8_t *offsets = (waveform == WAVE_SINE)
-                                ? sine_offsets
-                                : triangle_offsets;
-
-    for (index = 0U; index <= 16U; ++index)
-    {
-      s_preview_points[index].x =
-          (lv_value_precise_t)((UI_PREVIEW_WAVE_WIDTH * (int32_t)index) / 16);
-      s_preview_points[index].y =
-          (lv_value_precise_t)(UI_PREVIEW_WAVE_CENTER_Y + offsets[index % 16U]);
-    }
-    return 17U;
-  }
-
-  if (waveform == WAVE_SQUARE)
-  {
-    static const int16_t x[] = {0, 112, 112, 225, 225};
-    static const int8_t y[] = {0, 0, 24, 24, 0};
-
-    for (index = 0U; index < (sizeof(x) / sizeof(x[0])); ++index)
-    {
-      s_preview_points[index].x = (lv_value_precise_t)x[index];
-      s_preview_points[index].y = (lv_value_precise_t)y[index];
-    }
-    return (uint32_t)(sizeof(x) / sizeof(x[0]));
-  }
-
-  {
-    static const int16_t x[] = {0, 28, 28, 84, 84, 225};
-    static const int8_t y[] = {24, 24, 0, 0, 24, 24};
-
-    for (index = 0U; index < (sizeof(x) / sizeof(x[0])); ++index)
-    {
-      s_preview_points[index].x = (lv_value_precise_t)x[index];
-      s_preview_points[index].y = (lv_value_precise_t)y[index];
-    }
-    return (uint32_t)(sizeof(x) / sizeof(x[0]));
-  }
-}
-
-static void UI_CreateWaveformPreview(const channel_state_t *channel)
-{
-  lv_obj_t *preview = lv_obj_create(lv_screen_active());
-  lv_obj_t *label;
-  lv_obj_t *line;
-  uint32_t point_count = UI_BuildPreviewPoints(channel->waveform);
-  lv_color_t wave_color = channel->output_enable
-                              ? UI_ChannelColor(s_state.active_channel)
-                              : lv_color_hex(UI_COLOR_TEXT_MUTED);
-
-  lv_obj_set_pos(preview, 4, 29);
-  lv_obj_set_size(preview, 312, 36);
-  UI_SetObjectBox(preview,
-                  lv_color_hex(UI_COLOR_PANEL),
-                  lv_color_hex(UI_COLOR_BORDER),
-                  2);
-  lv_obj_clear_flag(preview, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_add_flag(preview, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(preview,
-                      UI_CommandEvent,
-                      LV_EVENT_CLICKED,
-                      (void *)(uintptr_t)UI_CMD_WAVE_PAGE);
-
-  label = UI_CreateLabel(preview, s_wave_names[channel->waveform], wave_color);
-  lv_obj_set_pos(label, 7, 8);
-
-  line = lv_line_create(preview);
-  lv_line_set_points(line, s_preview_points, point_count);
-  lv_obj_set_pos(line, 76, 5);
-  lv_obj_set_style_line_color(line, wave_color, LV_PART_MAIN);
-  lv_obj_set_style_line_width(line, 2, LV_PART_MAIN);
-  lv_obj_set_style_line_rounded(line, true, LV_PART_MAIN);
-  lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
-}
-
 static int16_t UI_GetWaveSample(waveform_t waveform, uint32_t phase_index)
 {
   static const int16_t sine_samples[32] = {
@@ -473,20 +387,40 @@ static int16_t UI_GetWaveSample(waveform_t waveform, uint32_t phase_index)
   return (phase_index < 8U) ? -100 : 100;
 }
 
-static void UI_BuildEditWavePoints(lv_point_precise_t *points,
-                                   waveform_t waveform,
-                                   int32_t center_y,
-                                   int32_t amplitude_px,
-                                   uint32_t phase_steps)
+static void UI_BuildWavePoints(lv_point_precise_t *points,
+                               waveform_t waveform,
+                               int32_t width,
+                               int32_t center_y,
+                               int32_t amplitude_px,
+                               uint32_t phase_tenths)
 {
   uint32_t index;
 
   for (index = 0U; index < UI_EDIT_WAVE_POINT_CAPACITY; ++index)
   {
-    int32_t sample = UI_GetWaveSample(waveform,
-                                      (index + phase_steps) % 32U);
+    uint32_t angle_tenths =
+        (((index * 3600U) / 32U) + phase_tenths) % 3600U;
+    uint32_t sample_position = angle_tenths * 32U;
+    uint32_t sample_index = sample_position / 3600U;
+    uint32_t fraction = sample_position % 3600U;
+    int32_t sample;
+
+    if ((waveform == WAVE_SINE) || (waveform == WAVE_TRIANGLE))
+    {
+      int32_t first = UI_GetWaveSample(waveform, sample_index);
+      int32_t second = UI_GetWaveSample(waveform,
+                                        (sample_index + 1U) % 32U);
+      sample = (first * (int32_t)(3600U - fraction) +
+                second * (int32_t)fraction) /
+               3600;
+    }
+    else
+    {
+      sample = UI_GetWaveSample(waveform, sample_index);
+    }
+
     points[index].x =
-        (lv_value_precise_t)((UI_EDIT_WAVE_WIDTH * (int32_t)index) / 32);
+        (lv_value_precise_t)((width * (int32_t)index) / 32);
     points[index].y =
         (lv_value_precise_t)(center_y + (sample * amplitude_px) / 100);
   }
@@ -514,17 +448,22 @@ static lv_obj_t *UI_CreateRule(lv_obj_t *parent,
 }
 
 static void UI_CreateDashedReference(lv_obj_t *parent,
+                                     int32_t x,
+                                     int32_t width,
                                      int32_t y,
                                      lv_color_t color)
 {
-  uint8_t index;
+  int32_t segment_x;
 
-  for (index = 0U; index < 11U; ++index)
+  for (segment_x = x; segment_x < (x + width); segment_x += 20)
   {
+    int32_t segment_width = ((x + width) - segment_x < 12)
+                                ? (x + width) - segment_x
+                                : 12;
     (void)UI_CreateRule(parent,
-                        12 + (int32_t)index * 20,
+                        segment_x,
                         y,
-                        12,
+                        segment_width,
                         1,
                         color,
                         LV_OPA_50);
@@ -543,8 +482,11 @@ static void UI_CreateHorizontalMeasure(lv_obj_t *parent,
   if (x2 <= (x1 + 16))
   {
     (void)UI_CreateRule(parent, x1, y - 5, 2, 11, color, LV_OPA_COVER);
-    label = UI_CreateLabel(parent, caption, color);
-    lv_obj_set_pos(label, x1 + 6, y - 7);
+    if (caption != NULL)
+    {
+      label = UI_CreateLabel(parent, caption, color);
+      lv_obj_set_pos(label, x1 + 6, y - 7);
+    }
     return;
   }
 
@@ -559,10 +501,13 @@ static void UI_CreateHorizontalMeasure(lv_obj_t *parent,
   lv_obj_set_pos(label, x1, y - 8);
   label = UI_CreateLabel(parent, LV_SYMBOL_RIGHT, color);
   lv_obj_set_pos(label, x2 - 10, y - 8);
-  label = UI_CreateLabel(parent, caption, color);
-  lv_obj_set_pos(label, ((x1 + x2) / 2) - 40, y + 2);
-  lv_obj_set_size(label, 80, 16);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+  if (caption != NULL)
+  {
+    label = UI_CreateLabel(parent, caption, color);
+    lv_obj_set_pos(label, ((x1 + x2) / 2) - 40, y + 2);
+    lv_obj_set_size(label, 80, 16);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+  }
 }
 
 static void UI_CreateVerticalMeasure(lv_obj_t *parent,
@@ -578,9 +523,27 @@ static void UI_CreateVerticalMeasure(lv_obj_t *parent,
 
   if ((bottom - top) < 14)
   {
-    (void)UI_CreateRule(parent, x, top, 2, 12, color, LV_OPA_COVER);
-    label = UI_CreateLabel(parent, caption, color);
-    lv_obj_set_pos(label, x + 7, top - 2);
+    if (bottom == top)
+    {
+      (void)UI_CreateRule(parent, x, top, 7, 2, color, LV_OPA_COVER);
+    }
+    else
+    {
+      (void)UI_CreateRule(parent,
+                          x + 3,
+                          top,
+                          1,
+                          bottom - top + 1,
+                          color,
+                          LV_OPA_COVER);
+      (void)UI_CreateRule(parent, x, top, 7, 1, color, LV_OPA_COVER);
+      (void)UI_CreateRule(parent, x, bottom, 7, 1, color, LV_OPA_COVER);
+    }
+    if (caption != NULL)
+    {
+      label = UI_CreateLabel(parent, caption, color);
+      lv_obj_set_pos(label, x + 10, ((top + bottom) / 2) - 7);
+    }
     return;
   }
 
@@ -595,20 +558,24 @@ static void UI_CreateVerticalMeasure(lv_obj_t *parent,
   lv_obj_set_pos(label, x, top - 3);
   label = UI_CreateLabel(parent, LV_SYMBOL_DOWN, color);
   lv_obj_set_pos(label, x, bottom - 11);
-  label = UI_CreateLabel(parent, caption, color);
-  lv_obj_set_pos(label, x + 18, ((top + bottom) / 2) - 7);
+  if (caption != NULL)
+  {
+    label = UI_CreateLabel(parent, caption, color);
+    lv_obj_set_pos(label, x + 18, ((top + bottom) / 2) - 7);
+  }
 }
 
-static lv_obj_t *UI_CreateEditWaveLine(lv_obj_t *parent,
-                                       lv_point_precise_t *points,
-                                       lv_color_t color,
-                                       int32_t width,
-                                       uint8_t dashed)
+static lv_obj_t *UI_CreateWaveLine(lv_obj_t *parent,
+                                   lv_point_precise_t *points,
+                                   int32_t x,
+                                   lv_color_t color,
+                                   int32_t width,
+                                   uint8_t dashed)
 {
   lv_obj_t *line = lv_line_create(parent);
 
   lv_line_set_points(line, points, UI_EDIT_WAVE_POINT_CAPACITY);
-  lv_obj_set_pos(line, 16, 0);
+  lv_obj_set_pos(line, x, 0);
   lv_obj_set_style_line_color(line, color, LV_PART_MAIN);
   lv_obj_set_style_line_width(line, width, LV_PART_MAIN);
   lv_obj_set_style_line_rounded(line, true, LV_PART_MAIN);
@@ -622,16 +589,126 @@ static lv_obj_t *UI_CreateEditWaveLine(lv_obj_t *parent,
   return line;
 }
 
+static void UI_CreateWaveformPreview(const channel_state_t *channel)
+{
+  lv_obj_t *preview = lv_obj_create(lv_screen_active());
+  lv_color_t reference_color = lv_color_hex(UI_COLOR_BORDER);
+  lv_color_t wave_color = UI_ChannelColor(s_state.active_channel);
+  int32_t center_y = UI_PREVIEW_WAVE_CENTER_Y;
+  int32_t amplitude_px = 14;
+  uint32_t phase_tenths = 0U;
+
+  lv_obj_set_pos(preview, 4, 29);
+  lv_obj_set_size(preview, 312, 48);
+  UI_SetObjectBox(preview,
+                  lv_color_hex(UI_COLOR_PANEL),
+                  lv_color_hex(UI_COLOR_BORDER),
+                  2);
+  lv_obj_clear_flag(preview, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(preview, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(preview,
+                      UI_CommandEvent,
+                      LV_EVENT_CLICKED,
+                      (void *)(uintptr_t)UI_CMD_WAVE_PAGE);
+
+  if (s_parameter == UI_PARAM_AMPLITUDE)
+  {
+    amplitude_px = 5 + (int32_t)(channel->amplitude_vpp * 5.0F + 0.5F);
+    if (amplitude_px > 15)
+    {
+      amplitude_px = 15;
+    }
+  }
+  else if (s_parameter == UI_PARAM_OFFSET)
+  {
+    center_y = UI_PREVIEW_WAVE_CENTER_Y -
+               (int32_t)(channel->offset_v * 8.0F);
+    amplitude_px = 8;
+    UI_CreateDashedReference(preview,
+                             24,
+                             UI_PREVIEW_WAVE_WIDTH,
+                             UI_PREVIEW_WAVE_CENTER_Y,
+                             reference_color);
+  }
+  else if (s_parameter == UI_PARAM_PHASE)
+  {
+    phase_tenths = (uint32_t)(channel->phase_deg * 10.0F + 0.5F);
+    UI_BuildWavePoints(s_preview_reference_points,
+                       channel->waveform,
+                       UI_PREVIEW_WAVE_WIDTH,
+                       UI_PREVIEW_WAVE_CENTER_Y,
+                       amplitude_px,
+                       0U);
+    (void)UI_CreateWaveLine(preview,
+                            s_preview_reference_points,
+                            24,
+                            reference_color,
+                            1,
+                            1U);
+  }
+
+  UI_BuildWavePoints(s_preview_points,
+                     channel->waveform,
+                     UI_PREVIEW_WAVE_WIDTH,
+                     center_y,
+                     amplitude_px,
+                     phase_tenths);
+  (void)UI_CreateWaveLine(preview,
+                          s_preview_points,
+                          24,
+                          wave_color,
+                          2,
+                          0U);
+
+  if (s_parameter == UI_PARAM_FREQUENCY)
+  {
+    UI_CreateHorizontalMeasure(preview,
+                               24,
+                               294,
+                               40,
+                               NULL,
+                               wave_color);
+  }
+  else if (s_parameter == UI_PARAM_AMPLITUDE)
+  {
+    UI_CreateVerticalMeasure(preview,
+                             3,
+                             center_y - amplitude_px,
+                             center_y + amplitude_px,
+                             NULL,
+                             wave_color);
+  }
+  else if (s_parameter == UI_PARAM_OFFSET)
+  {
+    UI_CreateVerticalMeasure(preview,
+                             3,
+                             UI_PREVIEW_WAVE_CENTER_Y,
+                             center_y,
+                             NULL,
+                             wave_color);
+  }
+  else
+  {
+    int32_t phase_x = 24 +
+                      (int32_t)(UI_PREVIEW_WAVE_WIDTH * channel->phase_deg /
+                                360.0F);
+    UI_CreateHorizontalMeasure(preview,
+                               24,
+                               phase_x,
+                               40,
+                               NULL,
+                               wave_color);
+  }
+}
+
 static void UI_CreateEditGraph(const channel_state_t *channel)
 {
   lv_obj_t *graph = lv_obj_create(lv_screen_active());
   lv_color_t reference_color = lv_color_hex(UI_COLOR_BORDER);
-  lv_color_t wave_color = channel->output_enable
-                              ? UI_ChannelColor(s_state.active_channel)
-                              : lv_color_hex(UI_COLOR_TEXT_MUTED);
+  lv_color_t wave_color = UI_ChannelColor(s_state.active_channel);
   int32_t center_y = UI_EDIT_WAVE_ZERO_Y;
   int32_t amplitude_px = 21;
-  uint32_t phase_steps = 0U;
+  uint32_t phase_tenths = 0U;
 
   lv_obj_set_pos(graph, 4, 31);
   lv_obj_set_size(graph, 312, 92);
@@ -640,7 +717,11 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
                   lv_color_hex(UI_COLOR_BORDER),
                   2);
   lv_obj_clear_flag(graph, LV_OBJ_FLAG_SCROLLABLE);
-  UI_CreateDashedReference(graph, UI_EDIT_WAVE_ZERO_Y, reference_color);
+  UI_CreateDashedReference(graph,
+                           12,
+                           UI_EDIT_WAVE_WIDTH + 4,
+                           UI_EDIT_WAVE_ZERO_Y,
+                           reference_color);
 
   if (s_parameter == UI_PARAM_AMPLITUDE)
   {
@@ -658,30 +739,33 @@ static void UI_CreateEditGraph(const channel_state_t *channel)
   }
   else if (s_parameter == UI_PARAM_PHASE)
   {
-    phase_steps =
-        ((uint32_t)(channel->phase_deg * 32.0F / 360.0F + 0.5F)) % 32U;
-    UI_BuildEditWavePoints(s_edit_reference_points,
-                           channel->waveform,
-                           UI_EDIT_WAVE_ZERO_Y,
-                           amplitude_px,
-                           0U);
-    (void)UI_CreateEditWaveLine(graph,
-                                s_edit_reference_points,
-                                reference_color,
-                                1,
-                                1U);
+    phase_tenths = (uint32_t)(channel->phase_deg * 10.0F + 0.5F);
+    UI_BuildWavePoints(s_edit_reference_points,
+                       channel->waveform,
+                       UI_EDIT_WAVE_WIDTH,
+                       UI_EDIT_WAVE_ZERO_Y,
+                       amplitude_px,
+                       0U);
+    (void)UI_CreateWaveLine(graph,
+                            s_edit_reference_points,
+                            16,
+                            reference_color,
+                            1,
+                            1U);
   }
 
-  UI_BuildEditWavePoints(s_edit_wave_points,
-                         channel->waveform,
-                         center_y,
-                         amplitude_px,
-                         phase_steps);
-  (void)UI_CreateEditWaveLine(graph,
-                              s_edit_wave_points,
-                              wave_color,
-                              2,
-                              0U);
+  UI_BuildWavePoints(s_edit_wave_points,
+                     channel->waveform,
+                     UI_EDIT_WAVE_WIDTH,
+                     center_y,
+                     amplitude_px,
+                     phase_tenths);
+  (void)UI_CreateWaveLine(graph,
+                          s_edit_wave_points,
+                          16,
+                          wave_color,
+                          2,
+                          0U);
 
   if (s_parameter == UI_PARAM_FREQUENCY)
   {
@@ -737,8 +821,8 @@ static void UI_ShowMain(void)
   UI_CreateWaveformPreview(channel);
 
   content = lv_obj_create(lv_screen_active());
-  lv_obj_set_pos(content, 0, 66);
-  lv_obj_set_size(content, 320, 130);
+  lv_obj_set_pos(content, 0, 78);
+  lv_obj_set_size(content, 320, 118);
   UI_SetObjectBox(content,
                   lv_color_hex(UI_COLOR_BACKGROUND),
                   lv_color_hex(UI_COLOR_BACKGROUND),
@@ -752,8 +836,8 @@ static void UI_ShowMain(void)
     lv_obj_t *value;
     char value_text[40];
 
-    lv_obj_set_pos(row, 4, 1 + (int32_t)index * 32);
-    lv_obj_set_size(row, 312, 30);
+    lv_obj_set_pos(row, 4, 1 + (int32_t)index * 29);
+    lv_obj_set_size(row, 312, 27);
     UI_SetObjectBox(row,
                     lv_color_hex((index == s_parameter)
                                      ? UI_COLOR_PANEL_SELECTED
@@ -774,7 +858,7 @@ static void UI_ShowMain(void)
                           (index == s_parameter)
                               ? UI_ChannelColor(s_state.active_channel)
                               : lv_color_hex(UI_COLOR_TEXT_MUTED));
-    lv_obj_set_pos(name, 8, 6);
+    lv_obj_set_pos(name, 8, 4);
 
     UI_FormatParameter((UI_Parameter)index,
                        channel,
